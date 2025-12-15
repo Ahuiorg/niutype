@@ -128,6 +128,19 @@ function generateCombination(chars: string[], length: number): string[] {
   return result.slice(0, length)
 }
 
+// 每5个字符后插入空格
+function insertSpaces(chars: string[], groupSize: number = 5): string[] {
+  const result: string[] = []
+  for (let i = 0; i < chars.length; i++) {
+    result.push(chars[i])
+    // 每 groupSize 个字符后插入空格（但不在最后一个字符后）
+    if ((i + 1) % groupSize === 0 && i < chars.length - 1) {
+      result.push(' ')
+    }
+  }
+  return result
+}
+
 // 主生成函数
 export function generateExercise(
   day: number,
@@ -165,7 +178,9 @@ export function generateExercise(
     exercises.push(...generateCombination(targetChars, 50))
   }
   
-  return shuffle(exercises)
+  // 打乱后插入空格分隔
+  const shuffled = shuffle(exercises)
+  return insertSpaces(shuffled)
 }
 
 // 获取当天练习的目标字符说明

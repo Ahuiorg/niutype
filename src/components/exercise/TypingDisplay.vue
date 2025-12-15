@@ -7,14 +7,13 @@ interface InputChar {
 }
 
 const props = defineProps<{
-  targetChars: string[]    // 待输入的字符数组
+  targetChars: string[]    // 待输入的字符数组（已包含空格）
   inputChars: InputChar[]  // 已输入的字符（含正确/错误状态）
   currentIndex: number     // 当前输入位置
 }>()
 
 // 显示的字符数量
-const DISPLAY_COUNT = 30
-const GROUP_SIZE = 5
+const DISPLAY_COUNT = 36
 
 // 获取当前显示窗口的起始位置
 const windowStart = computed(() => {
@@ -31,78 +30,54 @@ const windowStart = computed(() => {
   return start
 })
 
-// 显示的目标字符（上行）
+// 显示的目标字符（上行）- 空格已经在练习内容中，直接显示
 const displayTargetChars = computed(() => {
-  const chars = props.targetChars.slice(windowStart.value, windowStart.value + DISPLAY_COUNT)
-  return formatWithSpaces(chars)
+  return props.targetChars.slice(windowStart.value, windowStart.value + DISPLAY_COUNT)
 })
 
 // 显示的输入字符（下行）
 const displayInputChars = computed(() => {
-  const result: { char: string, status: 'correct' | 'wrong' | 'pending' | 'current' }[] = []
+  const result: { char: string, status: 'correct' | 'wrong' | 'pending' | 'current', isSpace: boolean }[] = []
   
   for (let i = 0; i < DISPLAY_COUNT; i++) {
     const actualIndex = windowStart.value + i
     
     if (actualIndex >= props.targetChars.length) break
     
+    const targetChar = props.targetChars[actualIndex]
+    const isSpace = targetChar === ' '
+    
     if (actualIndex < props.inputChars.length) {
       // 已输入
       const input = props.inputChars[actualIndex]
       result.push({
-        char: input.char,
-        status: input.correct ? 'correct' : 'wrong'
+        char: isSpace ? '␣' : input.char,  // 空格显示为特殊符号
+        status: input.correct ? 'correct' : 'wrong',
+        isSpace
       })
     } else if (actualIndex === props.currentIndex) {
       // 当前位置
       result.push({
-        char: '_',
-        status: 'current'
+        char: isSpace ? '␣' : '_',
+        status: 'current',
+        isSpace
       })
     } else {
       // 未输入
       result.push({
-        char: '_',
-        status: 'pending'
+        char: isSpace ? '␣' : '_',
+        status: 'pending',
+        isSpace
       })
     }
   }
   
-  return formatInputWithSpaces(result)
+  return result
 })
 
-// 格式化：每5个字符加空格
-function formatWithSpaces(chars: string[]): string[] {
-  const result: string[] = []
-  for (let i = 0; i < chars.length; i++) {
-    if (i > 0 && i % GROUP_SIZE === 0) {
-      result.push(' ')
-    }
-    result.push(chars[i])
-  }
-  return result
-}
-
-// 格式化输入字符：每5个加空格
-function formatInputWithSpaces(
-  chars: { char: string, status: 'correct' | 'wrong' | 'pending' | 'current' }[]
-): { char: string, status: 'correct' | 'wrong' | 'pending' | 'current' | 'space' }[] {
-  const result: { char: string, status: 'correct' | 'wrong' | 'pending' | 'current' | 'space' }[] = []
-  for (let i = 0; i < chars.length; i++) {
-    if (i > 0 && i % GROUP_SIZE === 0) {
-      result.push({ char: ' ', status: 'space' })
-    }
-    result.push(chars[i])
-  }
-  return result
-}
-
-// 当前高亮位置（在显示数组中的位置，考虑空格）
+// 当前高亮位置（在显示数组中的位置）
 const highlightIndex = computed(() => {
-  const relativeIndex = props.currentIndex - windowStart.value
-  // 计算插入的空格数量
-  const spacesBeforeIndex = Math.floor(relativeIndex / GROUP_SIZE)
-  return relativeIndex + spacesBeforeIndex
+  return props.currentIndex - windowStart.value
 })
 </script>
 
@@ -118,7 +93,7 @@ const highlightIndex = computed(() => {
           { 'space': char === ' ' },
           { 'highlight': index === highlightIndex }
         ]"
-      >{{ char }}</span>
+      >{{ char === ' ' ? '␣' : char }}</span>
     </div>
     
     <!-- 下行：已输入字符 -->
@@ -128,7 +103,8 @@ const highlightIndex = computed(() => {
         :key="'input-' + index"
         :class="[
           'char',
-          'status-' + item.status
+          'status-' + item.status,
+          { 'space': item.isSpace }
         ]"
       >{{ item.char }}</span>
     </div>
@@ -168,6 +144,13 @@ const highlightIndex = computed(() => {
   transition: all 0.15s ease;
 }
 
+/* 空格字符样式 */
+.char.space {
+  width: 1.6em;
+  opacity: 0.6;
+  font-size: 1.2rem;
+}
+
 /* 上行字符 */
 .target-line .char {
   color: #a6adc8;
@@ -181,8 +164,8 @@ const highlightIndex = computed(() => {
   font-weight: 700;
 }
 
-.target-line .char.space {
-  width: 1em;
+.target-line .char.highlight.space {
+  background: rgba(137, 220, 235, 0.1);
 }
 
 /* 下行字符 */
@@ -211,10 +194,6 @@ const highlightIndex = computed(() => {
   color: #45475a;
 }
 
-.input-line .char.status-space {
-  width: 1em;
-}
-
 @keyframes blink {
   0%, 50% {
     opacity: 1;
@@ -230,7 +209,9 @@ const highlightIndex = computed(() => {
     width: 1.4em;
     font-size: 1.2rem;
   }
+  
+  .char.space {
+    font-size: 1rem;
+  }
 }
 </style>
-
-

@@ -96,12 +96,12 @@ export const useExerciseStore = defineStore('exercise', () => {
       return 'ignore'
     }
 
-    // 标准化输入（字母转大写，符号保持原样）
+    // 标准化输入（字母转大写，空格和符号保持原样）
     const inputKey = /^[a-z]$/i.test(key) ? key.toUpperCase() : key
     const targetKey = /^[a-z]$/i.test(currentChar.value) ? currentChar.value.toUpperCase() : currentChar.value
     
-    // 接受字母、数字和允许的符号
-    const validChars = /^[A-Z0-9`\-=\[\]\\;',./]$/
+    // 接受字母、数字、空格和允许的符号
+    const validChars = /^[A-Z0-9 `\-=\[\]\\;',./]$/
     if (!validChars.test(inputKey)) {
       return 'ignore'
     }
@@ -110,38 +110,36 @@ export const useExerciseStore = defineStore('exercise', () => {
     const responseTime = lastCharTime.value ? now - lastCharTime.value : 0
     const isCorrect = inputKey === targetKey
 
-    // 记录输入
-    userStore.recordInput(targetKey, isCorrect, responseTime)
+    // 记录输入（空格不记录统计）
+    if (targetKey !== ' ') {
+      userStore.recordInput(targetKey, isCorrect, responseTime)
+    }
     
     // 更新时间
     userStore.updateTodayTime(elapsedTime.value)
 
-    if (isCorrect) {
-      // 正确，移动到下一个字符
-      currentIndex.value++
-      lastCharTime.value = now
+    // 无论正确还是错误，都移动到下一个字符
+    currentIndex.value++
+    lastCharTime.value = now
 
-      // 检查是否需要生成更多练习内容
-      if (currentIndex.value >= exercises.value.length && !isCompleted.value) {
-        // 追加更多练习
-        const moreExercises = generateExercise(
-          userStore.userData.currentDay,
-          userStore.userData.letterStats
-        )
-        exercises.value.push(...moreExercises)
-      }
-
-      // 检查休息提醒
-      if (now - lastRestTime.value >= EXERCISE_CONFIG.restInterval) {
-        showRestReminder.value = true
-        lastRestTime.value = now
-        pause()
-      }
-
-      return 'correct'
+    // 检查是否需要生成更多练习内容
+    if (currentIndex.value >= exercises.value.length && !isCompleted.value) {
+      // 追加更多练习
+      const moreExercises = generateExercise(
+        userStore.userData.currentDay,
+        userStore.userData.letterStats
+      )
+      exercises.value.push(...moreExercises)
     }
 
-    return 'wrong'
+    // 检查休息提醒
+    if (now - lastRestTime.value >= EXERCISE_CONFIG.restInterval) {
+      showRestReminder.value = true
+      lastRestTime.value = now
+      pause()
+    }
+
+    return isCorrect ? 'correct' : 'wrong'
   }
 
   function dismissRestReminder() {
@@ -176,12 +174,12 @@ export const useExerciseStore = defineStore('exercise', () => {
       return 'ignore'
     }
 
-    // 标准化输入（字母转大写，符号保持原样）
+    // 标准化输入（字母转大写，空格和符号保持原样）
     const inputKey = /^[a-z]$/i.test(key) ? key.toUpperCase() : key
     const targetKey = /^[a-z]$/i.test(currentChar.value) ? currentChar.value.toUpperCase() : currentChar.value
     
-    // 接受字母、数字和允许的符号
-    const validChars = /^[A-Z0-9`\-=\[\]\\;',./]$/
+    // 接受字母、数字、空格和允许的符号
+    const validChars = /^[A-Z0-9 `\-=\[\]\\;',./]$/
     if (!validChars.test(inputKey)) {
       return 'ignore'
     }
@@ -190,26 +188,25 @@ export const useExerciseStore = defineStore('exercise', () => {
     const responseTime = lastCharTime.value ? now - lastCharTime.value : 0
     const isCorrect = inputKey === targetKey
 
-    // 记录输入（计入总统计，但不影响今日进度）
-    userStore.recordPracticeInput(targetKey, isCorrect, responseTime)
-
-    if (isCorrect) {
-      currentIndex.value++
-      lastCharTime.value = now
-
-      // 检查是否需要生成更多练习内容
-      if (currentIndex.value >= exercises.value.length) {
-        const moreExercises = generateExercise(
-          userStore.userData.currentDay - 1,
-          userStore.userData.letterStats
-        )
-        exercises.value.push(...moreExercises)
-      }
-
-      return 'correct'
+    // 记录输入（空格不记录统计，计入总统计，但不影响今日进度）
+    if (targetKey !== ' ') {
+      userStore.recordPracticeInput(targetKey, isCorrect, responseTime)
     }
 
-    return 'wrong'
+    // 无论正确还是错误，都移动到下一个字符
+    currentIndex.value++
+    lastCharTime.value = now
+
+    // 检查是否需要生成更多练习内容
+    if (currentIndex.value >= exercises.value.length) {
+      const moreExercises = generateExercise(
+        userStore.userData.currentDay - 1,
+        userStore.userData.letterStats
+      )
+      exercises.value.push(...moreExercises)
+    }
+
+    return isCorrect ? 'correct' : 'wrong'
   }
 
   function reset() {

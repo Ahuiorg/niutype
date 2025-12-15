@@ -1,8 +1,5 @@
-# typing-exercise Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-typing-practice-app. Update Purpose after archive.
-## Requirements
 ### Requirement: 打字练习核心功能
 系统 SHALL 提供基于键盘输入的打字练习功能，支持渐进式难度和实时反馈。
 
@@ -74,28 +71,3 @@ TBD - created by archiving change add-typing-practice-app. Update Purpose after 
 - **WHEN** 某字符准确率低于80%
 - **THEN** 该字符被标记为弱项
 - **AND** 在练习中增加该字符的出现频率
-
-### Requirement: 每日任务限制
-系统 SHALL 强制每天完成练习才能解锁下一天。
-
-#### Scenario: 未完成当天练习
-- **WHEN** 用户尝试访问下一天的练习
-- **AND** 当天练习未完成
-- **THEN** 提示用户需要先完成当天练习
-
-#### Scenario: 中途退出练习
-- **WHEN** 用户在练习中途退出
-- **THEN** 保存当前进度（已用时间、已完成字符）
-- **AND** 下次可以继续当天练习
-
-### Requirement: 重新练习功能
-系统 SHALL 允许用户在完成当天任务后重新练习。
-
-#### Scenario: 完成后重新练习
-- **WHEN** 用户完成当天的练习任务
-- **AND** 用户点击"重新练习"按钮
-- **THEN** 重新生成当天的练习内容
-- **AND** 开始新一轮练习
-- **AND** 新练习的输入量计入总字符数统计
-- **AND** 不再发放积分（已完成当天任务）
-

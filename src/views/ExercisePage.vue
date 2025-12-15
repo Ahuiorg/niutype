@@ -67,8 +67,8 @@ function handleKeyDown(event: KeyboardEvent) {
   // 忽略特殊键
   if (event.metaKey || event.ctrlKey || event.altKey) return
   
-  // 空格键控制暂停/继续
-  if (event.code === 'Space') {
+  // Escape 键控制开始/暂停/继续
+  if (event.code === 'Escape') {
     event.preventDefault()
     if (!exerciseStore.isRunning) {
       exerciseStore.start()
@@ -83,13 +83,18 @@ function handleKeyDown(event: KeyboardEvent) {
   // 获取输入的字符
   let key = event.key
   
+  // 空格键特殊处理
+  if (event.code === 'Space') {
+    key = ' '
+  }
+  
   // 字母转大写
   if (/^[a-z]$/i.test(key)) {
     key = key.toUpperCase()
   }
   
-  // 只接受有效输入
-  const validChars = /^[A-Z0-9`\-=\[\]\\;',./]$/
+  // 只接受有效输入（包括空格）
+  const validChars = /^[A-Z0-9 `\-=\[\]\\;',./]$/
   if (!validChars.test(key)) return
   
   event.preventDefault()
@@ -103,15 +108,14 @@ function handleKeyDown(event: KeyboardEvent) {
     pressedKey.value = key
     pressResult.value = result
     
-    // 记录输入
-    const targetChar = exerciseStore.exercises[exerciseStore.currentIndex - (result === 'correct' ? 1 : 0)]
+    // 记录输入（currentIndex 已经增加了，所以 -1 是刚刚输入的位置）
     inputChars.value.push({
       char: key,
       correct: result === 'correct'
     })
     
-    // 重新练习模式下统计字符数
-    if (isPracticeMode.value && result === 'correct') {
+    // 重新练习模式下统计字符数（空格不计入）
+    if (isPracticeMode.value && result === 'correct' && key !== ' ') {
       practiceChars.value++
     }
     
@@ -235,7 +239,7 @@ function stopPractice() {
           </div>
           <div class="prompt-box">
             <span class="prompt-icon">👆</span>
-            <p class="start-hint">按 <kbd>空格键</kbd> 开始练习</p>
+            <p class="start-hint">按 <kbd>Esc</kbd> 开始练习</p>
           </div>
         </div>
         
@@ -250,7 +254,7 @@ function stopPractice() {
           </div>
           <div class="prompt-box prompt-paused">
             <span class="prompt-icon">⏸️</span>
-            <p class="pause-hint">已暂停 - 按 <kbd>空格键</kbd> 继续</p>
+            <p class="pause-hint">已暂停 - 按 <kbd>Esc</kbd> 继续</p>
           </div>
         </div>
         

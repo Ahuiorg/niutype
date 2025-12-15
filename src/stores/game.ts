@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { persist } from 'pinia-plugin-persistedstate'
 import type { GameTimeTracking, GameState } from '@/types'
 import { GAME_CONFIG } from '@/types'
 

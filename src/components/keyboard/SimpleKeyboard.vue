@@ -43,12 +43,20 @@ function getKeyColor(key: string): string {
 // 判断是否为目标键
 function isTargetKey(keyConfig: KeyConfig): boolean {
   if (!props.targetKey) return false
+  // 空格键特殊处理
+  if (keyConfig.key === 'space') {
+    return props.targetKey === ' '
+  }
   return keyConfig.key.toUpperCase() === props.targetKey.toUpperCase()
 }
 
 // 判断是否为按下的键
 function isPressedKey(keyConfig: KeyConfig): boolean {
   if (!props.pressedKey) return false
+  // 空格键特殊处理
+  if (keyConfig.key === 'space') {
+    return props.pressedKey === ' '
+  }
   return keyConfig.key.toUpperCase() === props.pressedKey.toUpperCase()
 }
 
@@ -260,6 +268,29 @@ const targetFinger = computed(() => {
 /* 空格键特殊样式 */
 .space-key {
   background: linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 50%, #e0e0e0 100%);
+}
+
+/* 空格键目标高亮 */
+.space-key.target {
+  background: linear-gradient(180deg, #e8f4ff 0%, #d0e8ff 50%, #b8dcff 100%);
+  box-shadow: 
+    0 4px 0 0 #54A0FF,
+    0 0 20px rgba(84, 160, 255, 0.5),
+    0 8px 16px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  animation: targetBounce 1.2s ease-in-out infinite;
+  transform: translateY(-2px);
+}
+
+.space-key.target .key-label {
+  color: #54A0FF;
+  font-weight: 700;
+}
+
+.space-key.target::before,
+.space-key.target::after {
+  background: #54A0FF;
+  opacity: 0.8;
 }
 
 /* 目标键高亮 */
