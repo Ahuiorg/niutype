@@ -38,9 +38,7 @@ export interface ConflictInfo {
 
 interface LocalSnapshot {
   profile: {
-    nickname: string
     soundEnabled: boolean
-    settings: Record<string, any>
   }
   progress: {
     currentDay: number
@@ -65,9 +63,7 @@ interface LocalSnapshot {
 function getLocalSnapshot(userStore: ReturnType<typeof useUserStore>): LocalSnapshot {
   return {
     profile: {
-      nickname: userStore.userData.settings.nickname,
-      soundEnabled: userStore.userData.settings.soundEnabled,
-      settings: { ...userStore.userData.settings },
+      soundEnabled: userStore.userData.soundEnabled,
     },
     progress: {
       currentDay: userStore.userData.currentDay,
@@ -143,8 +139,7 @@ export async function syncToCloud(): Promise<SyncResult> {
   try {
     // 同步用户资料
     await updateUserProfile(userId, {
-      nickname: userStore.userData.settings.nickname,
-      soundEnabled: userStore.userData.settings.soundEnabled,
+      soundEnabled: userStore.userData.soundEnabled,
     })
     synced.push('profile')
   } catch (e) {
@@ -212,8 +207,10 @@ export async function syncFromCloud(): Promise<SyncResult> {
   try {
     const profile = await getUserProfile(userId)
     if (profile) {
-      userStore.userData.settings.nickname = profile.nickname
-      userStore.userData.settings.soundEnabled = profile.soundEnabled ?? true
+      // 目前本地只持久化 soundEnabled，昵称等资料直接从 Supabase 读取
+      if (profile.soundEnabled !== null && profile.soundEnabled !== undefined) {
+        userStore.userData.soundEnabled = profile.soundEnabled
+      }
       synced.push('profile')
     }
   } catch (e) {
@@ -254,7 +251,10 @@ export async function syncFromCloud(): Promise<SyncResult> {
 
   try {
     const achievements = await getUserAchievements(userId)
-    userStore.userData.achievements = achievements.map((a) => a.achievementId)
+    userStore.userData.achievements = achievements.map((a) => ({
+      id: a.achievementId,
+      unlockedAt: a.unlockedAt,
+    }))
     synced.push('achievements')
   } catch (e) {
     errors.push(`achievements: ${e instanceof Error ? e.message : '同步失败'}`)
@@ -263,9 +263,12 @@ export async function syncFromCloud(): Promise<SyncResult> {
   try {
     const redeemedGifts = await getRedeemedGifts(userId)
     userStore.userData.redeemedGifts = redeemedGifts.map((g) => ({
+      id: g.id,
       giftId: g.giftId,
       redeemedAt: g.redeemedAt,
-      pointsSpent: g.pointsSpent,
+      giftName: g.giftName ?? '',
+      points: g.points,
+      claimedAt: g.claimedAt ?? undefined,
     }))
     synced.push('redeemedGifts')
   } catch (e) {
