@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build output
+dist/
+dist-ssr/
+build/
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+
+# Cursor
+.cursor/
+
+# Claude/OpenSkills (skills 通常不需要提交)
+.claude/skills/
+
+# Lock files (根据团队约定，可选择保留 pnpm-lock.yaml)
+package-lock.json
