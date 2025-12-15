@@ -47,6 +47,7 @@
 
 - Node.js 18+
 - pnpm（推荐）或 npm
+- 已创建 Supabase 项目（用于云端存储）
 
 ### 安装运行
 
@@ -57,6 +58,10 @@ cd niutype
 
 # 安装依赖
 pnpm install
+
+# 配置环境变量（根据 .env.example 创建 .env.local）
+cp .env.example .env.local
+# 然后编辑 .env.local，填入自己的 Supabase URL 和 API Key
 
 # 启动开发服务器
 pnpm dev
@@ -101,6 +106,9 @@ pnpm run test:coverage
 | [Pinia](https://pinia.vuejs.org/) | Vue 状态管理 |
 | [Vue Router](https://router.vuejs.org/) | 官方路由管理器 |
 | [Naive UI](https://www.naiveui.com/) | Vue 3 组件库 |
+| [Supabase](https://supabase.com/) | 认证、数据库、存储（Postgres + RLS） |
+| [Vitest](https://vitest.dev/) | 单元 / 集成测试 |
+| [Playwright](https://playwright.dev/) | 端到端自动化测试 |
 
 ---
 
@@ -149,9 +157,12 @@ niutype/
 - `exercise.ts` - 练习状态、统计数据
 - `game.ts` - 游戏状态
 
-### 数据持久化
+### 数据持久化 & 后端
 
-所有用户数据存储在 `localStorage`，通过 `pinia-plugin-persistedstate` 自动同步。
+- 所有核心数据（用户、练习记录、成就、积分、礼物、家长-学生关系等）存储在 **Supabase Postgres** 中  
+- 使用 **Row Level Security (RLS)** 确保不同用户/角色之间的数据隔离  
+- 前端通过 `src/services/api/*.ts` 调用 Supabase 接口，不再依赖 `localStorage` 作为数据源  
+- 本地仅保留少量 UI 偏好（如静音设置）在内存或轻量存储
 
 ---
 
