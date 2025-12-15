@@ -166,6 +166,13 @@ CREATE TABLE user_progress (
 - `last_completed_date`: 最后完成日期
 - `total_points/used_points`: 积分统计
 
+**积分系统说明**：
+- `total_points`: 用户累计获得的总积分（通过练习获取）
+- `used_points`: 用户已使用的积分（通过兑换礼物消耗）
+- `可用积分` = `total_points` - `used_points`
+- 积分获取：完成每日练习时根据打字字符数、准确率、连续天数计算
+- 积分消耗：学生兑换家长创建的礼物时扣除
+
 #### 3. exercise_records（练习记录表）
 存储每日练习记录
 
@@ -308,7 +315,8 @@ CREATE TABLE parent_student_relations (
   play_per_slot_minutes INTEGER NOT NULL DEFAULT 30,     -- 换算得到的可玩分钟
   max_daily_play_minutes INTEGER,  -- 可选每日上限（null 表示不限于换算结果）
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(parent_id, student_id)
+  UNIQUE(parent_id, student_id),
+  UNIQUE(student_id)  -- 一个学生只能被一个家长绑定
 );
 ```
 
@@ -319,6 +327,8 @@ CREATE TABLE parent_student_relations (
 **设计说明**：
 - 计算可用时长时，若存在绑定的家长配置，则优先使用该学生最新的一条配置；若无则使用系统默认 30→30
 - 家长无限制自身游戏时长；此配置仅影响学生
+- **一个学生只能被一个家长绑定**：通过 `UNIQUE(student_id)` 约束实现
+- 一个家长可以绑定多个学生
 
 #### 7. game_records（游戏记录表）
 存储游戏相关记录
@@ -344,7 +354,7 @@ CREATE TABLE game_records (
 - `completed`: 是否用完当日时间
 
 #### 7. gifts（礼物表）
-存储可兑换的礼物（系统定义）
+存储家长为学生创建的礼物
 
 ```sql
 CREATE TABLE gifts (
@@ -354,13 +364,23 @@ CREATE TABLE gifts (
   image_url TEXT,
   description TEXT,
   is_active BOOLEAN DEFAULT true,
+  created_by UUID REFERENCES auth.users(id) ON DELETE CASCADE,  -- 创建礼物的家长
+  student_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,  -- 礼物所属的学生
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX idx_gifts_created_by ON gifts(created_by);
+CREATE INDEX idx_gifts_student_id ON gifts(student_id);
 ```
 
 **字段说明**：
-- 系统级表，所有用户共享
+- `created_by`: 创建礼物的家长ID
+- `student_id`: 礼物所属的学生ID（只有该学生可以兑换）
 - `is_active`: 是否启用
+
+**设计说明**：
+- 家长为绑定的学生创建礼物，学生只能看到和兑换属于自己的礼物
+- 家长只能管理自己创建的礼物
+- 礼物与学生一对多关系：一个学生可以有多个礼物
 
 #### 8. redeemed_gifts（已兑换礼物表）
 存储用户兑换的礼物

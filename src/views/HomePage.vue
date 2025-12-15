@@ -17,12 +17,13 @@ const currentStage = computed(() => getStage(userStore.userData.currentDay))
 const stageName = computed(() => STAGE_NAMES[currentStage.value])
 const dayDescription = computed(() => getDayDescription(userStore.userData.currentDay))
 
-const todayTimeMinutes = computed(() => {
-  return Math.floor(userStore.userData.todayProgress.totalTime / 1000 / 60)
+// 今日进度：按字符数计算
+const todayChars = computed(() => {
+  return userStore.userData.todayProgress.totalChars
 })
 
-const targetMinutes = computed(() => {
-  return EXERCISE_CONFIG.dailyDuration / 1000 / 60
+const targetChars = computed(() => {
+  return EXERCISE_CONFIG.minDailyKeystrokes  // 300 字符
 })
 
 const accuracyPercent = computed(() => {
@@ -95,8 +96,8 @@ function startExercise() {
       
       <div class="today-progress">
         <ProgressBar 
-          :current="todayTimeMinutes"
-          :total="targetMinutes"
+          :current="todayChars"
+          :total="targetChars"
           label="今日进度"
         />
       </div>

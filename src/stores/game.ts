@@ -2,6 +2,20 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { GameTimeTracking, GameState } from '@/types'
 import { GAME_CONFIG } from '@/types'
+import { useAuthStore } from './auth'
+import { getGameRecords, saveGameRecord, canStartGame as apiCanStartGame, getAvailablePlayMinutes } from '@/services/api/game.api'
+import { getUserMembership } from '@/services/api/user.api'
+
+interface OfflineGameItem {
+  payload: {
+    userId: string
+    gameType: string
+    date: string
+    totalTimeMs: number
+    completed: boolean
+  }
+  timestamp: number
+}
 
 // 获取今天的日期字符串
 function getTodayDate(): string {
@@ -26,6 +40,22 @@ export const useGameStore = defineStore('game', () => {
     currentGame: null,
     startTime: null,
   })
+  const authStore = useAuthStore()
+  const currentUserId = computed(() => authStore.session?.user?.id ?? null)
+
+  // 离线队列（仅内存，不持久化）
+  const offlineQueue = ref<OfflineGameItem[]>([])
+  const isOnline = ref(navigator.onLine)
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+      isOnline.value = true
+      void flushOfflineQueue()
+    })
+    window.addEventListener('offline', () => {
+      isOnline.value = false
+    })
+  }
 
   // 计算属性
   const remainingTime = computed(() => {
@@ -146,18 +176,92 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  async function pushGameRecord(gameType: string) {
+    const userId = currentUserId.value
+    if (!userId) return
+    const payload = {
+      userId,
+      gameType,
+      date: getTodayDate(),
+      totalTimeMs: gameTimeTracking.value.totalTime,
+      completed: gameTimeTracking.value.completed,
+    }
+    if (!isOnline.value) {
+      offlineQueue.value.push({ payload, timestamp: Date.now() })
+      return
+    }
+    try {
+      await saveGameRecord(payload)
+    } catch {
+      offlineQueue.value.push({ payload, timestamp: Date.now() })
+    }
+  }
+
+  async function pullGameRecords() {
+    const userId = currentUserId.value
+    if (!userId) return
+    await getGameRecords(userId)
+  }
+
+  async function flushOfflineQueue() {
+    if (!isOnline.value) return
+    const pending = [...offlineQueue.value]
+    offlineQueue.value = []
+    for (const item of pending) {
+      try {
+        await saveGameRecord(item.payload)
+      } catch {
+        offlineQueue.value.push(item)
+      }
+    }
+  }
+
+  async function checkCanStartGame(exerciseCompleted: boolean) {
+    const userId = currentUserId.value
+    if (!userId) return { allowed: false, reason: '未登录' }
+
+    const role = (authStore.session?.user?.user_metadata?.role as 'student' | 'parent') ?? 'student'
+    const membership = await getUserMembership(userId)
+    const tier = membership?.membershipTier ?? 'free'
+
+    return apiCanStartGame(userId, getTodayDate(), role, tier, exerciseCompleted)
+  }
+
+  async function fetchAvailablePlayMinutes() {
+    const userId = currentUserId.value
+    if (!userId) return null
+    return getAvailablePlayMinutes(userId, getTodayDate())
+  }
+
+  // 重置所有游戏数据
+  function reset() {
+    resetGameTime()
+    gameState.value = {
+      isPlaying: false,
+      currentGame: null,
+      startTime: null,
+    }
+    offlineQueue.value = []
+  }
+
   return {
     gameTimeTracking,
     gameState,
     remainingTime,
     canPlay,
+    isOnline,
+    offlineQueue,
     checkAndResetDay,
     startGame,
     stopGame,
     pauseGame,
     resumeGame,
     updateGameTime,
+    pushGameRecord,
+    pullGameRecords,
+    flushOfflineQueue,
+    checkCanStartGame,
+    fetchAvailablePlayMinutes,
+    reset,
   }
-}, {
-  persist: true,
 })

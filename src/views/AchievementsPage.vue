@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { ACHIEVEMENTS, getAchievementProgress } from '@/utils/achievementChecker'
 
 const userStore = useUserStore()
+
+// 页面加载时检查并同步成就
+onMounted(async () => {
+  await userStore.checkAndSyncAchievements()
+})
 
 const unlockedIds = computed(() => {
   return userStore.userData.achievements.map(a => a.id)

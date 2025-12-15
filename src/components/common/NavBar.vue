@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useGameStore } from '@/stores/game'
+import { useAuthStore } from '@/stores/auth'
+import { getUserProfile, type UserProfile } from '@/services/api/user.api'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const gameStore = useGameStore()
+const authStore = useAuthStore()
 
 const navItems = [
   { path: '/', name: '首页', icon: '🏠' },
@@ -34,9 +37,72 @@ const formatTime = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
+const userProfile = ref<UserProfile | null>(null)
+
+const isAuthenticated = computed(() => authStore.isAuthenticated)
+
+const userDisplayName = computed(() => {
+  if (userProfile.value) {
+    return userProfile.value.nickname || userProfile.value.accountName || '小朋友'
+  }
+  if (isAuthenticated.value) {
+    // 已登录但资料尚未加载好时给出中性提示，避免显示“未登录”
+    return '加载中...'
+  }
+  return '未登录'
+})
+
+const userRoleLabel = computed(() => {
+  if (!userProfile.value) return ''
+  return userProfile.value.role === 'parent' ? '家长' : '学生'
+})
+
+const userInitial = computed(() => {
+  const name = userDisplayName.value
+  return name ? name.charAt(0) : '你'
+})
+
+async function loadUserProfile() {
+  const currentUserId = authStore.session?.user?.id
+  if (!currentUserId) {
+    userProfile.value = null
+    return
+  }
+
+  try {
+    const profile = await getUserProfile(currentUserId)
+    userProfile.value = profile
+  } catch {
+    // 获取失败时保持现状，不阻塞导航栏渲染
+  }
+}
+
+function handleLogin() {
+  router.push({
+    path: '/login',
+    query: { redirect: route.fullPath },
+  })
+}
+
+async function handleLogout() {
+  await authStore.logout()
+  userProfile.value = null
+  router.push('/login')
+}
+
 onMounted(() => {
   gameStore.checkAndResetDay()
+  if (authStore.isAuthenticated) {
+    void loadUserProfile()
+  }
 })
+
+watch(
+  () => authStore.session?.user?.id,
+  () => {
+    void loadUserProfile()
+  },
+)
 </script>
 
 <template>
@@ -69,6 +135,47 @@ onMounted(() => {
         <div class="navbar-points">
           <span class="points-icon">⭐</span>
           <span class="points-value">{{ userStore.availablePoints }}</span>
+        </div>
+
+        <div class="navbar-user">
+          <div
+            v-if="isAuthenticated"
+            class="user-info"
+          >
+            <div class="user-avatar">
+              <span>{{ userInitial }}</span>
+            </div>
+            <div class="user-text">
+              <div class="user-name">
+                {{ userDisplayName }}
+              </div>
+              <div class="user-role" v-if="userRoleLabel">
+                {{ userRoleLabel }}
+              </div>
+            </div>
+            <button class="user-action" type="button" @click="handleLogout">
+              退出
+            </button>
+          </div>
+          <div
+            v-else
+            class="user-info guest"
+          >
+            <div class="user-avatar guest-avatar">
+              <span>?</span>
+            </div>
+            <div class="user-text">
+              <div class="user-name">
+                未登录
+              </div>
+              <div class="user-role">
+                点击登录
+              </div>
+            </div>
+            <button class="user-action primary" type="button" @click="handleLogin">
+              登录
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -280,6 +387,98 @@ onMounted(() => {
   font-size: 1.15rem;
 }
 
+.navbar-user {
+  display: flex;
+  align-items: center;
+}
+
+.user-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-pill);
+  color: white;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.05),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.user-info.guest {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--candy-pink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.guest-avatar {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--candy-purple);
+}
+
+.user-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.user-name {
+  font-weight: 700;
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
+.user-action {
+  margin-left: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--candy-pink);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.user-action.primary {
+  background: #fff;
+  color: var(--candy-orange);
+}
+
+.user-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.18);
+}
+
+.user-action:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
 @media (max-width: 768px) {
   .navbar-content {
     flex-wrap: wrap;
@@ -305,6 +504,14 @@ onMounted(() => {
   
   .brand-sparkle {
     display: none;
+  }
+
+  .user-text {
+    display: none;
+  }
+
+  .user-action {
+    padding: 4px 8px;
   }
 }
 </style>

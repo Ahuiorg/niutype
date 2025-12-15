@@ -49,6 +49,10 @@
 - **ADDED**: 数据同步服务模块（支持离线模式和冲突解决）
 - **ADDED**: Row Level Security (RLS) 策略配置（按模块配置）
 - **ADDED**: 数据迁移工具（localStorage → Supabase）
+- **ADDED**: 顶部导航栏集成用户信息展示和认证入口
+  - 登录后在导航右侧展示当前用户昵称和角色标签（学生/家长）
+  - 未登录时在导航右侧展示“未登录”提示和“登录”按钮，点击跳转登录页
+  - 导航栏内提供登出按钮，统一调用 Supabase 认证登出逻辑
 
 ## Impact
 - **Affected specs**: 
@@ -82,3 +86,4 @@
   - 新增 `src/utils/migration.ts` - 数据迁移工具
   - 修改 `src/main.ts` - 初始化 Supabase
   - 新增环境变量配置
+  - 修改 `src/components/common/NavBar.vue` - 显示当前用户信息并提供登录/登出入口

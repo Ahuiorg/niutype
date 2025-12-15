@@ -13,6 +13,17 @@ import type {
 import { calculatePoints } from '@/utils/pointsCalculator'
 import { checkNewAchievements, ACHIEVEMENTS } from '@/utils/achievementChecker'
 import { ALL_LETTERS } from '@/utils/fingerMapping'
+import { useAuthStore } from './auth'
+import {
+  getUserProfile,
+  getUserProgress,
+  updateUserProfile,
+  updateUserProgress,
+  type MembershipTier,
+} from '@/services/api/user.api'
+import { getUserPoints, addPoints, deductPoints } from '@/services/api/points.api'
+import { getAvailableGifts, getRedeemedGifts, redeemGift as redeemGiftApi } from '@/services/api/gift.api'
+import { getUserAchievements, unlockAchievement } from '@/services/api/achievement.api'
 
 // 获取今天的日期字符串
 function getTodayDate(): string {
@@ -60,9 +71,15 @@ function getDefaultUserData(): UserData {
 export const useUserStore = defineStore('user', () => {
   // 状态
   const userData = ref<UserData>(getDefaultUserData())
+  const membership = ref<{ tier: MembershipTier; expiresAt: string | null; level: number }>({
+    tier: 'free',
+    expiresAt: null,
+    level: 1,
+  })
 
   // 计算属性
   const availablePoints = computed(() => userData.value.totalPoints - userData.value.usedPoints)
+  const currentUserId = computed(() => useAuthStore().session?.user?.id ?? null)
   
   const todayCompleted = computed(() => {
     const today = getTodayDate()
@@ -314,6 +331,7 @@ export const useUserStore = defineStore('user', () => {
   // 设置
   function toggleSound() {
     userData.value.soundEnabled = !userData.value.soundEnabled
+    void pushProfileSettings()
   }
 
   // 数据导入导出
@@ -339,9 +357,168 @@ export const useUserStore = defineStore('user', () => {
     userData.value = getDefaultUserData()
   }
 
+  async function loadFromCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+
+    const [profile, progress] = await Promise.all([getUserProfile(userId), getUserProgress(userId)])
+
+    if (profile) {
+      membership.value = {
+        tier: profile.membershipTier,
+        expiresAt: profile.membershipExpiresAt,
+        level: profile.level,
+      }
+      if (profile.soundEnabled !== null && profile.soundEnabled !== undefined) {
+        userData.value.soundEnabled = profile.soundEnabled
+      }
+    }
+
+    if (progress) {
+      userData.value.currentDay = progress.currentDay
+      userData.value.consecutiveDays = progress.consecutiveDays
+      userData.value.lastCompletedDate = progress.lastCompletedDate
+      userData.value.totalPoints = progress.totalPoints
+      userData.value.usedPoints = progress.usedPoints
+    }
+  }
+
+  async function pushProgressToCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+    await updateUserProgress(userId, {
+      currentDay: userData.value.currentDay,
+      consecutiveDays: userData.value.consecutiveDays,
+      lastCompletedDate: userData.value.lastCompletedDate,
+      totalPoints: userData.value.totalPoints,
+      usedPoints: userData.value.usedPoints,
+    })
+  }
+
+  async function pushProfileSettings() {
+    const userId = currentUserId.value
+    if (!userId) return
+    await updateUserProfile(userId, {
+      soundEnabled: userData.value.soundEnabled,
+      membershipTier: membership.value.tier,
+      membershipExpiresAt: membership.value.expiresAt,
+      level: membership.value.level,
+    })
+  }
+
+  async function syncPointsFromCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+    // 从 user_progress 获取积分（与 redeemGift 保持一致）
+    const progress = await getUserProgress(userId)
+    if (progress) {
+      userData.value.totalPoints = progress.totalPoints
+      userData.value.usedPoints = progress.usedPoints
+    }
+  }
+
+  async function addPointsCloud(delta: number, reason?: string) {
+    const userId = currentUserId.value
+    if (!userId) return
+    await addPoints(userId, delta, reason)
+    userData.value.totalPoints += Math.abs(delta)
+  }
+
+  async function deductPointsCloud(delta: number, reason?: string) {
+    const userId = currentUserId.value
+    if (!userId) return
+    await deductPoints(userId, delta, reason)
+    userData.value.usedPoints += Math.abs(delta)
+  }
+
+  async function syncGiftsFromCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+    const [available, redeemed] = await Promise.all([getAvailableGifts(), getRedeemedGifts(userId)])
+    userData.value.gifts = available.map((g) => ({
+      id: g.id,
+      name: g.name,
+      points: g.points,
+      image: g.imageUrl ?? undefined,
+      createdAt: new Date().toISOString(),
+    }))
+    userData.value.redeemedGifts = redeemed.map((r) => ({
+      id: r.id,
+      giftId: r.giftId,
+      giftName: available.find((g) => g.id === r.giftId)?.name || '',
+      points: r.points,
+      redeemedAt: r.redeemedAt,
+      claimedAt: r.claimedAt || undefined,
+    }))
+  }
+
+  async function redeemGiftCloud(giftId: string) {
+    const userId = currentUserId.value
+    if (!userId) return false
+    try {
+      const redeemed = await redeemGiftApi(userId, giftId)
+      if (redeemed) {
+        // 同步积分和兑换记录
+        await syncPointsFromCloud()
+        await syncGiftsFromCloud()
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Redeem gift failed:', error)
+      return false
+    }
+  }
+
+  async function syncAchievementsFromCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+    const list = await getUserAchievements(userId)
+    userData.value.achievements = list.map((a) => ({
+      id: a.achievementId,
+      unlockedAt: a.unlockedAt,
+    }))
+  }
+
+  async function unlockAchievementCloud(achievementId: string) {
+    const userId = currentUserId.value
+    if (!userId) return
+    // 检查是否已经在本地解锁
+    if (userData.value.achievements.some(a => a.id === achievementId)) {
+      return
+    }
+    await unlockAchievement(userId, achievementId)
+    userData.value.achievements.push({ id: achievementId, unlockedAt: new Date().toISOString() })
+  }
+
+  // 检查并同步所有应该解锁的成就
+  async function checkAndSyncAchievements() {
+    const userId = currentUserId.value
+    if (!userId) return
+    
+    const unlockedIds = userData.value.achievements.map(a => a.id)
+    const newAchievements = checkNewAchievements(userStats.value, unlockedIds)
+    
+    // 同步新解锁的成就到云端
+    for (const achievement of newAchievements) {
+      try {
+        await unlockAchievement(userId, achievement.id)
+        userData.value.achievements.push({
+          id: achievement.id,
+          unlockedAt: new Date().toISOString(),
+        })
+      } catch (error) {
+        console.warn('Failed to sync achievement:', achievement.id, error)
+      }
+    }
+    
+    return newAchievements
+  }
+
   return {
     // 状态
     userData,
+    membership,
     // 计算属性
     availablePoints,
     todayCompleted,
@@ -361,12 +538,21 @@ export const useUserStore = defineStore('user', () => {
     removeGift,
     redeemGift,
     claimGift,
+    syncPointsFromCloud,
+    addPointsCloud,
+    deductPointsCloud,
+    syncGiftsFromCloud,
+    redeemGiftCloud,
+    syncAchievementsFromCloud,
+    unlockAchievementCloud,
+    checkAndSyncAchievements,
     toggleSound,
     exportData,
     importData,
     resetData,
+    loadFromCloud,
+    pushProgressToCloud,
+    pushProfileSettings,
   }
-}, {
-  persist: true,
 })
 

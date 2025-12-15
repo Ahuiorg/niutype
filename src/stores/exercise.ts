@@ -1,11 +1,42 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useUserStore } from './user'
+import { useAuthStore } from './auth'
 import { generateExercise, getDayDescription } from '@/utils/exerciseGenerator'
 import { EXERCISE_CONFIG } from '@/types'
+import {
+  batchUpdateLetterStats,
+  getExerciseRecords,
+  getLetterStats,
+  saveExerciseRecord,
+  type ExerciseRecord as CloudExerciseRecord,
+} from '@/services/api/exercise.api'
+
+interface OfflineQueueItem {
+  type: 'record' | 'stats'
+  payload: any
+  timestamp: number
+}
 
 export const useExerciseStore = defineStore('exercise', () => {
   const userStore = useUserStore()
+  const authStore = useAuthStore()
+  const currentUserId = computed(() => authStore.session?.user?.id ?? null)
+
+  // 离线队列（仅内存，不持久化）
+  const offlineQueue = ref<OfflineQueueItem[]>([])
+  const isOnline = ref(navigator.onLine)
+
+  // 监听网络状态
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+      isOnline.value = true
+      void flushOfflineQueue()
+    })
+    window.addEventListener('offline', () => {
+      isOnline.value = false
+    })
+  }
 
   // 状态
   const exercises = ref<string[]>([])
@@ -146,11 +177,24 @@ export const useExerciseStore = defineStore('exercise', () => {
     showRestReminder.value = false
   }
 
-  function completeExercise() {
+  async function completeExercise() {
     isRunning.value = false
     isPaused.value = false
     userStore.updateTodayTime(elapsedTime.value)
-    return userStore.completeDay()
+    const result = userStore.completeDay()
+    
+    // 同步新解锁的成就到云端
+    if (result.newAchievements.length > 0) {
+      for (const achievement of result.newAchievements) {
+        try {
+          await userStore.unlockAchievementCloud(achievement.id)
+        } catch (error) {
+          console.warn('Failed to sync achievement:', achievement.id, error)
+        }
+      }
+    }
+    
+    return result
   }
 
   // 重新练习（今天已完成后可继续练习）
@@ -209,7 +253,64 @@ export const useExerciseStore = defineStore('exercise', () => {
     return isCorrect ? 'correct' : 'wrong'
   }
 
-  function reset() {
+  // 只重置本地状态，不保存到云端（用于登出时）
+  function resetLocal() {
+    exercises.value = []
+    currentIndex.value = 0
+    isRunning.value = false
+    isPaused.value = false
+    startTime.value = null
+    pausedTime.value = 0
+    lastCharTime.value = null
+    showRestReminder.value = false
+    lastRestTime.value = 0
+    offlineQueue.value = []
+  }
+
+  async function reset() {
+    // 在重置前保存当前练习时间
+    if (isRunning.value && startTime.value) {
+      userStore.updateTodayTime(elapsedTime.value)
+    }
+
+    // 同步数据到云端
+    const userId = currentUserId.value
+    if (userId) {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const progress = userStore.userData.todayProgress
+        
+        // 如果有练习数据，保存今日记录
+        if (progress.totalChars > 0) {
+          const accuracy = progress.totalChars > 0 
+            ? progress.correctChars / progress.totalChars 
+            : 0
+          const avgResponseTime = progress.totalChars > 0 
+            ? progress.totalTime / progress.totalChars 
+            : 0
+          
+          await saveExerciseRecord({
+            userId,
+            day: userStore.userData.currentDay,
+            date: today,
+            totalChars: progress.totalChars,
+            correctChars: progress.correctChars,
+            totalTimeMs: progress.totalTime,
+            earnedPoints: 0, // 积分在 completeDay 时计算
+            accuracy,
+            avgResponseTimeMs: avgResponseTime,
+          })
+        }
+
+        await Promise.all([
+          pushStatsToCloud(),
+          userStore.pushProgressToCloud(),
+        ])
+      } catch (error) {
+        console.warn('Failed to sync data to cloud:', error)
+      }
+    }
+
     exercises.value = []
     currentIndex.value = 0
     isRunning.value = false
@@ -221,6 +322,103 @@ export const useExerciseStore = defineStore('exercise', () => {
     lastRestTime.value = 0
   }
 
+  async function pullFromCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+    const [records, letters] = await Promise.all([getExerciseRecords(userId), getLetterStats(userId)])
+    userStore.userData.dailyRecords = records.map((r) => ({
+      day: r.day,
+      date: r.date,
+      totalChars: r.totalChars,
+      correctChars: r.correctChars,
+      totalTime: r.totalTimeMs,
+      earnedPoints: r.earnedPoints,
+      accuracy: r.accuracy,
+      avgResponseTime: r.avgResponseTimeMs,
+    }))
+    
+    // 恢复今日进度
+    const today = new Date().toISOString().split('T')[0]
+    const todayRecord = records.find((r) => r.date === today)
+    if (todayRecord) {
+      userStore.userData.todayProgress = {
+        date: today,
+        startTime: null,
+        totalTime: todayRecord.totalTimeMs,
+        completed: todayRecord.earnedPoints > 0, // 有积分说明已完成
+        totalChars: todayRecord.totalChars,
+        correctChars: todayRecord.correctChars,
+      }
+    }
+    
+    const nextStats = JSON.parse(JSON.stringify(userStore.userData.letterStats))
+    letters.forEach((l) => {
+      nextStats[l.letter] = {
+        totalAttempts: l.totalAttempts,
+        correctAttempts: l.correctAttempts,
+        totalResponseTime: l.totalResponseTimeMs,
+      }
+    })
+    userStore.userData.letterStats = nextStats
+  }
+
+  async function pushStatsToCloud() {
+    const userId = currentUserId.value
+    if (!userId) return
+    const statsArray = Object.entries(userStore.userData.letterStats).map(([letter, stat]) => ({
+      letter,
+      totalAttempts: stat.totalAttempts,
+      correctAttempts: stat.correctAttempts,
+      totalResponseTimeMs: stat.totalResponseTime,
+    }))
+    if (!isOnline.value) {
+      offlineQueue.value.push({ type: 'stats', payload: { userId, statsArray }, timestamp: Date.now() })
+      return
+    }
+    try {
+      await batchUpdateLetterStats(userId, statsArray)
+    } catch {
+      offlineQueue.value.push({ type: 'stats', payload: { userId, statsArray }, timestamp: Date.now() })
+    }
+  }
+
+  async function pushRecordToCloud(record: CloudExerciseRecord) {
+    const userId = currentUserId.value
+    if (!userId) return
+    const payload = {
+      ...record,
+      userId,
+      totalTimeMs: record.totalTimeMs ?? (record as any).totalTime,
+      avgResponseTimeMs: record.avgResponseTimeMs ?? (record as any).avgResponseTime,
+    }
+    if (!isOnline.value) {
+      offlineQueue.value.push({ type: 'record', payload, timestamp: Date.now() })
+      return
+    }
+    try {
+      await saveExerciseRecord(payload)
+    } catch {
+      offlineQueue.value.push({ type: 'record', payload, timestamp: Date.now() })
+    }
+  }
+
+  async function flushOfflineQueue() {
+    if (!isOnline.value) return
+    const pending = [...offlineQueue.value]
+    offlineQueue.value = []
+    for (const item of pending) {
+      try {
+        if (item.type === 'stats') {
+          await batchUpdateLetterStats(item.payload.userId, item.payload.statsArray)
+        } else if (item.type === 'record') {
+          await saveExerciseRecord(item.payload)
+        }
+      } catch {
+        offlineQueue.value.push(item)
+      }
+    }
+  }
+
   return {
     // 状态
     exercises,
@@ -228,6 +426,8 @@ export const useExerciseStore = defineStore('exercise', () => {
     isRunning,
     isPaused,
     showRestReminder,
+    isOnline,
+    offlineQueue,
     // 计算属性
     currentChar,
     progress,
@@ -246,6 +446,11 @@ export const useExerciseStore = defineStore('exercise', () => {
     completeExercise,
     restartExercise,
     reset,
+    resetLocal,
+    pullFromCloud,
+    pushStatsToCloud,
+    pushRecordToCloud,
+    flushOfflineQueue,
   }
 })
 

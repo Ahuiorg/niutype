@@ -264,21 +264,21 @@
     - [x] 创建 RLS 策略（家长可查看学生数据）
 
 34. **创建家长模块 API 服务**
-    - [ ] 创建 `src/services/api/parent.api.ts`
-    - [ ] 实现 `getUserRole()` 方法
-    - [ ] 实现 `updateUserRole()` 方法
-    - [ ] 实现 `getStudentList()` 方法
-    - [ ] 实现 `addStudentRelation()` 方法
-    - [ ] 实现 `removeStudentRelation()` 方法
-    - [ ] 实现 `getStudentProgress()` 方法
-    - [ ] 实现 `getStudentExerciseRecords()` 方法
-    - [ ] 实现 `getStudentGameRecords()` 方法
-    - [ ] 实现/更新 `updatePracticePlayRatio(studentId, practiceMinutes, playMinutes, maxDailyMinutes?)`（家长配置练习→游戏比例）
-    - [ ] 实现 `getPracticePlayRatio(studentId)`（用于游戏时长计算）
+    - [x] 创建 `src/services/api/parent.api.ts`
+    - [x] 实现 `getUserRole()` 方法
+    - [x] 实现 `updateUserRole()` 方法
+    - [x] 实现 `getStudentList()` 方法
+    - [x] 实现 `addStudentRelation()` 方法
+    - [x] 实现 `removeStudentRelation()` 方法
+    - [x] 实现 `getStudentProgress()` 方法
+    - [x] 实现 `getStudentExerciseRecords()` 方法
+    - [x] 实现 `getStudentGameRecords()` 方法
+    - [x] 实现/更新 `updatePracticePlayRatio(studentId, practiceMinutes, playMinutes, maxDailyMinutes?)`（家长配置练习→游戏比例）
+    - [x] 实现 `getPracticePlayRatio(studentId)`（用于游戏时长计算）
 
 35. **创建 parent.ts Store（可选）**
-    - [ ] 创建 `src/stores/parent.ts`
-    - [ ] 实现家长相关状态管理
+    - [x] 创建 `src/stores/parent.ts`
+    - [x] 实现家长相关状态管理
 
 ---
 
@@ -334,36 +334,81 @@
 #### 数据同步服务
 
 42. **创建数据同步服务**
-    - [ ] 创建 `src/services/sync/sync.service.ts`
-    - [ ] 实现 `syncToCloud()` 方法
-    - [ ] 实现 `syncFromCloud()` 方法
-    - [ ] 实现冲突检测逻辑
-    - [ ] 实现冲突解决策略
+    - [x] 创建 `src/services/sync/sync.service.ts`
+    - [x] 实现 `syncToCloud()` 方法
+    - [x] 实现 `syncFromCloud()` 方法
+    - [x] 实现冲突检测逻辑
+    - [x] 实现冲突解决策略
 
 43. **创建数据迁移服务**
-    - [ ] 创建 `src/services/sync/migration.service.ts`
-    - [ ] 实现 `detectOldData()` 方法
-    - [ ] 实现 `migrateData()` 方法
-    - [ ] 实现数据验证逻辑
-    - [ ] 创建迁移 UI 组件
+    - [x] 创建 `src/services/sync/migration.service.ts`
+    - [x] 实现 `detectOldData()` 方法
+    - [x] 实现 `migrateData()` 方法
+    - [x] 实现数据验证逻辑
+    - [x] 创建迁移 UI 组件
 
 ---
 
 ### 测试和优化
 
 44. **端到端测试**
-    - [ ] 测试基础设施模块（认证流程）
-    - [ ] 测试用户模块（资料、进度同步）
-    - [ ] 测试练习模块（记录同步）
+    - [x] 测试基础设施模块（认证流程）
+      - [x] 用户注册（学生/家长角色）
+      - [x] 用户登录
+      - [x] 用户登出
+      - [x] 新用户注册后数据初始化正确
+    - [x] 测试用户模块（资料、进度同步）
+      - [x] 练习进度保存到云端
+      - [x] 从云端加载练习进度
+      - [x] 移除 localStorage 持久化（完全使用云端存储）
+      - [x] 今日进度（todayProgress）正确恢复
+    - [x] 测试练习模块（记录同步）
+      - [x] 练习记录保存到 exercise_records 表
+      - [x] 字母统计保存到 letter_stats 表
+      - [x] 练习结束时自动同步数据
+      - [x] 准确率计算正确（包含错误输入场景）
+      - [x] 今日进度按字符数计算（目标300字符）
+    - [x] 测试统计模块（数据展示）
+      - [x] 总字符数、准确率、反应时间正确显示
+      - [x] 字母热力图按准确率正确着色
+      - [x] 手指准确率统计正确
+      - [x] 最近练习记录正确显示
+    - [x] 测试成就模块（解锁流程）
+      - [x] 成就列表正确显示
+      - [x] 成就进度正确计算
+      - [x] 成就解锁后同步到云端
+      - [x] 页面加载时自动检查并同步待解锁成就
     - [ ] 测试游戏模块（记录同步）
-    - [ ] 测试积分模块（积分管理）
-    - [ ] 测试礼物模块（兑换流程）
-    - [ ] 测试成就模块（解锁流程）
-    - [ ] 测试家长模块（关联、查看学生数据）
+    - [x] 测试积分模块（积分管理）
+      - [x] 积分显示正确（可用积分、总获得、已使用）
+      - [x] 可用积分计算正确（总积分 - 已使用）
+      - [x] 积分从 user_progress 表同步（与兑换逻辑一致）
+    - [x] 测试礼物模块（兑换流程）
+      - [x] 家长可以为学生添加礼物
+      - [x] 家长可以删除礼物
+      - [x] 学生可以看到家长添加的礼物
+      - [x] 学生积分不足时按钮禁用并显示差额
+      - [x] 礼物数据按用户隔离（学生只能看到自己的礼物）
+      - [x] 兑换确认弹窗正确显示消耗积分和剩余积分
+      - [x] 兑换成功后积分实时更新
+      - [x] 兑换成功后礼物出现在"待领取"区域
+      - [x] 确认领取后移至"领取历史"
+      - [x] 边界测试：积分刚好够兑换
+      - [x] 边界测试：积分归零后所有礼物按钮禁用
+      - [x] 边界测试：高价礼物（超出积分）正确显示差额
+    - [x] 测试家长模块（关联、查看学生数据）
+      - [x] 家长可以通过账户名绑定学生
+      - [x] 一个学生只能被一个家长绑定
+      - [x] 已绑定的学生显示在学生选择器中
+      - [x] 家长可以切换不同学生管理礼物
     - [ ] 测试资源模块（发音、资源获取）
     - [ ] 测试离线模式
     - [ ] 测试数据迁移流程
-    - [ ] 测试 RLS 策略（确保数据隔离）
+    - [x] 测试 RLS 策略（确保数据隔离）
+      - [x] 不同用户数据完全隔离
+      - [x] 登出后重新登录数据保持
+      - [x] 多用户（家长、学生1、学生2）数据完全独立
+      - [x] 用户切换时数据正确清除和加载
 
 45. **性能优化**
     - [ ] 优化批量操作
@@ -372,16 +417,35 @@
     - [ ] 添加本地缓存策略
 
 46. **错误处理完善**
-    - [ ] 添加全局错误处理
-    - [ ] 添加用户友好的错误提示
-    - [ ] 添加错误日志记录
-    - [ ] 处理网络错误场景
+    - [x] 添加全局错误处理
+    - [x] 添加用户友好的错误提示
+    - [x] 添加错误日志记录
+    - [x] 处理网络错误场景
 
 47. **文档更新**
     - [ ] 更新 README.md（添加 Supabase 配置说明）
     - [ ] 创建数据库迁移文档
     - [ ] 创建 API 服务使用文档（按模块）
     - [ ] 更新项目文档
+
+---
+
+## 🐛 Bug 修复记录
+
+### 2024-12-15: 积分同步问题
+
+**问题描述**：
+- 学生兑换礼物后，积分显示为0而不是正确的剩余积分
+- 原因：`syncPointsFromCloud` 从 `points_transactions` 表获取积分，但实际积分存储在 `user_progress` 表中
+
+**修复方案**：
+- 修改 `src/stores/user.ts` 中的 `syncPointsFromCloud` 函数
+- 改为从 `user_progress` 表获取 `totalPoints` 和 `usedPoints`
+- 与 `redeemGift` API 保持一致的数据源
+
+**相关文件**：
+- `src/stores/user.ts`: 修复 `syncPointsFromCloud` 和 `redeemGiftCloud` 函数
+- `src/services/api/gift.api.ts`: 重构礼物兑换 API
 
 ---
 

@@ -1,188 +1,427 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { useAuthStore } from '@/stores/auth'
+import { useParentStore } from '@/stores/parent'
 import Modal from '@/components/common/Modal.vue'
+import {
+  getGiftsForStudent,
+  getGiftsByParent,
+  createGiftForStudent,
+  deleteGift,
+  redeemGift as redeemGiftApi,
+  getRedeemedGifts,
+  claimGiftByStudent,
+  type GiftItem,
+  type RedeemedGiftRow,
+} from '@/services/api/gift.api'
 
 const userStore = useUserStore()
+const authStore = useAuthStore()
+const parentStore = useParentStore()
 
+const isParent = computed(() => authStore.isParent)
+const isStudent = computed(() => authStore.isStudent)
+const currentUserId = computed(() => authStore.session?.user?.id)
+
+// 礼物列表
+const gifts = ref<GiftItem[]>([])
+const redeemedGifts = ref<RedeemedGiftRow[]>([])
+const loading = ref(false)
+const error = ref('')
+
+// 家长选择的学生
+const selectedStudentId = ref<string | null>(null)
+
+// 模态框
 const showAddModal = ref(false)
 const showRedeemModal = ref(false)
-const selectedGift = ref<any>(null)
+const showBindModal = ref(false)
+const selectedGift = ref<GiftItem | null>(null)
 
+// 新礼物表单
 const newGift = ref({
   name: '',
   points: 100,
+  description: '',
 })
 
-const pendingGifts = computed(() => {
-  return userStore.userData.redeemedGifts.filter(g => !g.claimedAt)
+// 绑定学生表单
+const bindAccountName = ref('')
+const bindError = ref('')
+
+// 计算属性
+const pendingGifts = computed(() => redeemedGifts.value.filter(g => !g.claimedAt))
+const claimedGifts = computed(() => redeemedGifts.value.filter(g => g.claimedAt))
+
+const availablePoints = computed(() => {
+  return userStore.userData.totalPoints - userStore.userData.usedPoints
 })
 
-const claimedGifts = computed(() => {
-  return userStore.userData.redeemedGifts.filter(g => g.claimedAt)
-})
-
-function addGift() {
-  if (!newGift.value.name || newGift.value.points <= 0) return
+// 加载礼物数据
+async function loadGifts() {
+  if (!currentUserId.value) return
+  loading.value = true
+  error.value = ''
   
-  userStore.addGift(newGift.value.name, newGift.value.points)
-  newGift.value = { name: '', points: 100 }
-  showAddModal.value = false
+  try {
+    if (isStudent.value) {
+      // 学生：加载家长为其创建的礼物
+      gifts.value = await getGiftsForStudent(currentUserId.value)
+      redeemedGifts.value = await getRedeemedGifts(currentUserId.value)
+    } else if (isParent.value && selectedStudentId.value) {
+      // 家长：加载为选中学生创建的礼物
+      gifts.value = await getGiftsByParent(currentUserId.value, selectedStudentId.value)
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '加载礼物失败'
+  } finally {
+    loading.value = false
+  }
 }
 
-function confirmRedeem(gift: any) {
+// 家长：添加礼物
+async function addGift() {
+  if (!currentUserId.value || !selectedStudentId.value) return
+  if (!newGift.value.name || newGift.value.points <= 0) return
+  
+  loading.value = true
+  error.value = ''
+  
+  try {
+    await createGiftForStudent(
+      currentUserId.value,
+      selectedStudentId.value,
+      newGift.value.name,
+      newGift.value.points,
+      newGift.value.description || undefined
+    )
+    newGift.value = { name: '', points: 100, description: '' }
+    showAddModal.value = false
+    await loadGifts()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '添加礼物失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+// 家长：删除礼物
+async function removeGift(giftId: string) {
+  if (!currentUserId.value) return
+  if (!confirm('确定要删除这个礼物吗？')) return
+  
+  loading.value = true
+  error.value = ''
+  
+  try {
+    await deleteGift(currentUserId.value, giftId)
+    await loadGifts()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '删除礼物失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+// 学生：确认兑换
+function confirmRedeem(gift: GiftItem) {
   selectedGift.value = gift
   showRedeemModal.value = true
 }
 
-function redeem() {
-  if (!selectedGift.value) return
+// 学生：兑换礼物
+async function redeem() {
+  if (!currentUserId.value || !selectedGift.value) return
   
-  const success = userStore.redeemGift(selectedGift.value.id)
-  if (success) {
+  loading.value = true
+  error.value = ''
+  
+  try {
+    await redeemGiftApi(currentUserId.value, selectedGift.value.id)
     showRedeemModal.value = false
     selectedGift.value = null
+    // 刷新用户积分和礼物列表
+    await userStore.syncPointsFromCloud()
+    await loadGifts()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '兑换失败'
+  } finally {
+    loading.value = false
   }
 }
 
-function claimGift(redeemedId: string) {
-  userStore.claimGift(redeemedId)
-}
-
-function removeGift(giftId: string) {
-  if (confirm('确定要删除这个礼物吗？')) {
-    userStore.removeGift(giftId)
+// 学生：确认领取
+async function claimGift(redeemedId: string) {
+  if (!currentUserId.value) return
+  
+  loading.value = true
+  error.value = ''
+  
+  try {
+    await claimGiftByStudent(currentUserId.value, redeemedId)
+    await loadGifts()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '领取失败'
+  } finally {
+    loading.value = false
   }
 }
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('zh-CN')
 }
+
+// 家长：绑定学生
+async function bindStudent() {
+  if (!bindAccountName.value.trim()) return
+  
+  bindError.value = ''
+  loading.value = true
+  
+  try {
+    await parentStore.bindStudentByAccountName(bindAccountName.value.trim())
+    bindAccountName.value = ''
+    showBindModal.value = false
+    // 绑定成功后自动选择该学生
+    if (parentStore.students.length > 0) {
+      selectedStudentId.value = parentStore.students[parentStore.students.length - 1].student?.id || null
+    }
+  } catch (e) {
+    bindError.value = e instanceof Error ? e.message : '绑定失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+// 监听选中学生变化
+watch(selectedStudentId, () => {
+  if (isParent.value) {
+    loadGifts()
+  }
+})
+
+// 初始化
+onMounted(async () => {
+  if (isParent.value) {
+    await parentStore.loadStudents()
+    // 自动选择第一个学生
+    if (parentStore.students.length > 0) {
+      selectedStudentId.value = parentStore.students[0].student?.id || null
+    }
+  } else if (isStudent.value) {
+    await loadGifts()
+  }
+})
 </script>
 
 <template>
   <div class="page-container gift-shop-page">
     <h1 class="page-title animate-fadeInUp">🎁 礼物商店</h1>
     
-    <!-- 积分显示 -->
-    <div class="points-display card animate-fadeInUp stagger-1">
-      <div class="points-main">
-        <div class="points-icon-wrapper">
-          <span class="points-star">⭐</span>
-          <span class="points-sparkle">✨</span>
-        </div>
-        <div class="points-detail">
-          <span class="points-value">{{ userStore.availablePoints }}</span>
-          <span class="points-label">可用积分</span>
-        </div>
-      </div>
-      <div class="points-stats">
-        <div class="stat">
-          <span class="stat-value">{{ userStore.userData.totalPoints }}</span>
-          <span class="stat-label">总获得</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat">
-          <span class="stat-value">{{ userStore.userData.usedPoints }}</span>
-          <span class="stat-label">已使用</span>
-        </div>
-      </div>
+    <!-- 错误提示 -->
+    <div v-if="error" class="error-banner animate-fadeInUp">
+      {{ error }}
+      <button class="close-btn" @click="error = ''">&times;</button>
     </div>
     
-    <!-- 待领取礼物 -->
-    <div class="section animate-fadeInUp stagger-2" v-if="pendingGifts.length > 0">
-      <h2 class="section-title">📦 待领取的礼物</h2>
-      <div class="pending-gifts">
-        <div 
-          v-for="gift in pendingGifts" 
-          :key="gift.id"
-          class="pending-gift-card card"
-        >
-          <div class="gift-icon-animated">🎁</div>
-          <div class="gift-info">
-            <span class="gift-name">{{ gift.giftName }}</span>
-            <span class="gift-date">兑换于 {{ formatDate(gift.redeemedAt) }}</span>
-          </div>
-          <button class="btn btn-success claim-btn" @click="claimGift(gift.id)">
-            ✓ 确认领取
+    <!-- 家长视图 -->
+    <template v-if="isParent">
+      <!-- 学生选择器 -->
+      <div class="student-selector card animate-fadeInUp stagger-1">
+        <div class="selector-header">
+          <h3>👶 选择学生</h3>
+          <button class="btn btn-secondary" @click="showBindModal = true">
+            + 绑定学生
+          </button>
+        </div>
+        <div v-if="parentStore.students.length === 0" class="no-students">
+          <p>您还没有绑定任何学生</p>
+          <p class="hint">点击"绑定学生"添加您的孩子</p>
+          <button class="btn btn-primary" @click="showBindModal = true">
+            + 绑定学生
+          </button>
+        </div>
+        <div v-else class="student-tabs">
+          <button
+            v-for="{ student } in parentStore.students"
+            :key="student?.id"
+            class="student-tab"
+            :class="{ active: selectedStudentId === student?.id }"
+            @click="selectedStudentId = student?.id || null"
+          >
+            <span class="student-avatar">{{ student?.nickname?.charAt(0) || '?' }}</span>
+            <span class="student-name">{{ student?.nickname || '未知' }}</span>
           </button>
         </div>
       </div>
-    </div>
-    
-    <!-- 可兑换礼物 -->
-    <div class="section animate-fadeInUp stagger-3">
-      <div class="section-header">
-        <h2 class="section-title">🛒 可兑换礼物</h2>
-        <button class="btn btn-secondary add-btn" @click="showAddModal = true">
-          <span>+</span> 添加礼物
-        </button>
-      </div>
       
-      <div class="gifts-grid" v-if="userStore.userData.gifts.length > 0">
-        <div 
-          v-for="(gift, index) in userStore.userData.gifts" 
-          :key="gift.id"
-          class="gift-card card"
-          :style="{ animationDelay: `${0.1 + index * 0.05}s` }"
-        >
-          <button class="remove-btn" @click="removeGift(gift.id)" title="删除">×</button>
-          <div class="gift-image">
-            <span class="gift-emoji">🎁</span>
-            <span class="gift-ribbon">🎀</span>
+      <template v-if="selectedStudentId">
+        <!-- 礼物管理 -->
+        <div class="section animate-fadeInUp stagger-2">
+          <div class="section-header">
+            <h2 class="section-title">🎁 礼物列表</h2>
+            <button class="btn btn-primary add-btn" @click="showAddModal = true">
+              <span>+</span> 添加礼物
+            </button>
           </div>
-          <div class="gift-content">
-            <h3 class="gift-name">{{ gift.name }}</h3>
-            <div class="gift-points">
-              <span class="points-icon">⭐</span>
-              <span>{{ gift.points }}</span>
+          
+          <div class="gifts-grid" v-if="gifts.length > 0">
+            <div 
+              v-for="gift in gifts" 
+              :key="gift.id"
+              class="gift-card card"
+            >
+              <button class="remove-btn" @click="removeGift(gift.id)" title="删除">×</button>
+              <div class="gift-image">
+                <span class="gift-emoji">🎁</span>
+              </div>
+              <div class="gift-content">
+                <h3 class="gift-name">{{ gift.name }}</h3>
+                <p v-if="gift.description" class="gift-desc">{{ gift.description }}</p>
+                <div class="gift-points">
+                  <span class="points-icon">⭐</span>
+                  <span>{{ gift.points }}</span>
+                </div>
+              </div>
             </div>
           </div>
-          <button 
-            class="btn btn-primary redeem-btn"
-            :class="{ 'not-enough': userStore.availablePoints < gift.points }"
-            :disabled="userStore.availablePoints < gift.points"
-            @click="confirmRedeem(gift)"
-          >
-            <template v-if="userStore.availablePoints < gift.points">
-              还差 {{ gift.points - userStore.availablePoints }} 分
-            </template>
-            <template v-else>
-              立即兑换 🎉
-            </template>
-          </button>
+          
+          <div class="empty-gifts card" v-else>
+            <div class="empty-illustration">
+              <span class="empty-gift">🎁</span>
+              <span class="empty-question">?</span>
+            </div>
+            <p class="empty-title">还没有礼物哦~</p>
+            <p class="empty-hint">点击"添加礼物"来设置奖励吧！</p>
+            <button class="btn btn-primary" @click="showAddModal = true">
+              + 添加第一个礼物
+            </button>
+          </div>
+        </div>
+      </template>
+    </template>
+    
+    <!-- 学生视图 -->
+    <template v-else-if="isStudent">
+      <!-- 积分显示 -->
+      <div class="points-display card animate-fadeInUp stagger-1">
+        <div class="points-main">
+          <div class="points-icon-wrapper">
+            <span class="points-star">⭐</span>
+            <span class="points-sparkle">✨</span>
+          </div>
+          <div class="points-detail">
+            <span class="points-value">{{ availablePoints }}</span>
+            <span class="points-label">可用积分</span>
+          </div>
+        </div>
+        <div class="points-stats">
+          <div class="stat">
+            <span class="stat-value">{{ userStore.userData.totalPoints }}</span>
+            <span class="stat-label">总获得</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-value">{{ userStore.userData.usedPoints }}</span>
+            <span class="stat-label">已使用</span>
+          </div>
         </div>
       </div>
       
-      <div class="empty-gifts card" v-else>
-        <div class="empty-illustration">
-          <span class="empty-gift">🎁</span>
-          <span class="empty-question">?</span>
+      <!-- 待领取礼物 -->
+      <div class="section animate-fadeInUp stagger-2" v-if="pendingGifts.length > 0">
+        <h2 class="section-title">📦 待领取的礼物</h2>
+        <div class="pending-gifts">
+          <div 
+            v-for="gift in pendingGifts" 
+            :key="gift.id"
+            class="pending-gift-card card"
+          >
+            <div class="gift-icon-animated">🎁</div>
+            <div class="gift-info">
+              <span class="gift-name">{{ gift.giftName }}</span>
+              <span class="gift-date">兑换于 {{ formatDate(gift.redeemedAt) }}</span>
+            </div>
+            <button class="btn btn-success claim-btn" @click="claimGift(gift.id)">
+              ✓ 确认领取
+            </button>
+          </div>
         </div>
-        <p class="empty-title">还没有礼物哦~</p>
-        <p class="empty-hint">点击"添加礼物"来设置奖励吧！</p>
-        <button class="btn btn-primary" @click="showAddModal = true">
-          + 添加第一个礼物
-        </button>
       </div>
-    </div>
+      
+      <!-- 可兑换礼物 -->
+      <div class="section animate-fadeInUp stagger-3">
+        <h2 class="section-title">🛒 可兑换礼物</h2>
+        
+        <div class="gifts-grid" v-if="gifts.length > 0">
+          <div 
+            v-for="gift in gifts" 
+            :key="gift.id"
+            class="gift-card card"
+          >
+            <div class="gift-image">
+              <span class="gift-emoji">🎁</span>
+              <span class="gift-ribbon">🎀</span>
+            </div>
+            <div class="gift-content">
+              <h3 class="gift-name">{{ gift.name }}</h3>
+              <p v-if="gift.description" class="gift-desc">{{ gift.description }}</p>
+              <div class="gift-points">
+                <span class="points-icon">⭐</span>
+                <span>{{ gift.points }}</span>
+              </div>
+            </div>
+            <button 
+              class="btn btn-primary redeem-btn"
+              :class="{ 'not-enough': availablePoints < gift.points }"
+              :disabled="availablePoints < gift.points"
+              @click="confirmRedeem(gift)"
+            >
+              <template v-if="availablePoints < gift.points">
+                还差 {{ gift.points - availablePoints }} 分
+              </template>
+              <template v-else>
+                立即兑换 🎉
+              </template>
+            </button>
+          </div>
+        </div>
+        
+        <div class="empty-gifts card" v-else>
+          <div class="empty-illustration">
+            <span class="empty-gift">🎁</span>
+            <span class="empty-question">?</span>
+          </div>
+          <p class="empty-title">还没有礼物哦~</p>
+          <p class="empty-hint">请让家长为你添加奖励礼物吧！</p>
+        </div>
+      </div>
+      
+      <!-- 已领取历史 -->
+      <div class="section animate-fadeInUp stagger-4" v-if="claimedGifts.length > 0">
+        <h2 class="section-title">📜 领取历史</h2>
+        <div class="history-list">
+          <div 
+            v-for="gift in claimedGifts" 
+            :key="gift.id"
+            class="history-item"
+          >
+            <span class="history-icon">✅</span>
+            <span class="history-name">{{ gift.giftName }}</span>
+            <span class="history-points">{{ gift.points }} 积分</span>
+            <span class="history-date">{{ formatDate(gift.claimedAt!) }}</span>
+          </div>
+        </div>
+      </div>
+    </template>
     
-    <!-- 已领取历史 -->
-    <div class="section animate-fadeInUp stagger-4" v-if="claimedGifts.length > 0">
-      <h2 class="section-title">📜 领取历史</h2>
-      <div class="history-list">
-        <div 
-          v-for="gift in claimedGifts" 
-          :key="gift.id"
-          class="history-item"
-        >
-          <span class="history-icon">✅</span>
-          <span class="history-name">{{ gift.giftName }}</span>
-          <span class="history-points">{{ gift.points }} 积分</span>
-          <span class="history-date">{{ formatDate(gift.claimedAt!) }}</span>
-        </div>
+    <!-- 未登录或未知角色 -->
+    <template v-else>
+      <div class="empty-gifts card animate-fadeInUp">
+        <p class="empty-title">请先登录</p>
       </div>
-    </div>
+    </template>
     
     <!-- 添加礼物弹窗 -->
     <Modal :show="showAddModal" title="✨ 添加新礼物" @close="showAddModal = false">
@@ -205,6 +444,15 @@ function formatDate(dateStr: string): string {
             class="form-input"
           />
         </div>
+        <div class="form-group">
+          <label>描述（可选）</label>
+          <input 
+            v-model="newGift.description" 
+            type="text" 
+            placeholder="礼物的详细说明"
+            class="form-input"
+          />
+        </div>
         <div class="form-hint">
           <span>💡</span>
           <span>建议设置 50-500 积分的礼物，更容易达成目标！</span>
@@ -215,9 +463,9 @@ function formatDate(dateStr: string): string {
         <button 
           class="btn btn-primary" 
           @click="addGift"
-          :disabled="!newGift.name || newGift.points <= 0"
+          :disabled="!newGift.name || newGift.points <= 0 || loading"
         >
-          添加礼物 🎁
+          {{ loading ? '添加中...' : '添加礼物 🎁' }}
         </button>
       </template>
     </Modal>
@@ -236,13 +484,47 @@ function formatDate(dateStr: string): string {
           </div>
           <div class="confirm-row">
             <span>兑换后剩余</span>
-            <span class="confirm-balance">{{ userStore.availablePoints - selectedGift.points }} ⭐</span>
+            <span class="confirm-balance">{{ availablePoints - selectedGift.points }} ⭐</span>
           </div>
         </div>
       </div>
       <template #footer>
         <button class="btn btn-secondary" @click="showRedeemModal = false">再想想</button>
-        <button class="btn btn-primary" @click="redeem">确认兑换 ✨</button>
+        <button class="btn btn-primary" @click="redeem" :disabled="loading">
+          {{ loading ? '兑换中...' : '确认兑换 ✨' }}
+        </button>
+      </template>
+    </Modal>
+    
+    <!-- 绑定学生弹窗 -->
+    <Modal :show="showBindModal" title="👶 绑定学生" @close="showBindModal = false; bindError = ''">
+      <div class="add-gift-form">
+        <div class="form-group">
+          <label>学生账户名</label>
+          <input 
+            v-model="bindAccountName" 
+            type="text" 
+            placeholder="输入学生的账户名"
+            class="form-input"
+          />
+        </div>
+        <div v-if="bindError" class="form-error">
+          {{ bindError }}
+        </div>
+        <div class="form-hint">
+          <span>💡</span>
+          <span>一个学生只能被一个家长绑定</span>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="showBindModal = false; bindError = ''">取消</button>
+        <button 
+          class="btn btn-primary" 
+          @click="bindStudent"
+          :disabled="!bindAccountName.trim() || loading"
+        >
+          {{ loading ? '绑定中...' : '绑定学生' }}
+        </button>
       </template>
     </Modal>
   </div>
@@ -251,6 +533,109 @@ function formatDate(dateStr: string): string {
 <style scoped>
 .gift-shop-page {
   padding-top: 32px;
+}
+
+/* 错误提示 */
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border: 1px solid #f87171;
+  border-radius: var(--radius-lg);
+  color: #b91c1c;
+  margin-bottom: 20px;
+}
+
+.error-banner .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* 学生选择器 */
+.student-selector {
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.selector-header h3 {
+  margin-bottom: 0;
+  font-family: var(--font-display);
+}
+
+.no-students {
+  text-align: center;
+  padding: 20px;
+  color: var(--color-text-secondary);
+}
+
+.no-students .hint {
+  font-size: 0.9rem;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.form-error {
+  color: #dc2626;
+  font-size: 0.9rem;
+  padding: 10px;
+  background: #fef2f2;
+  border-radius: var(--radius-md);
+}
+
+.student-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.student-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #f0f2f5;
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.student-tab:hover {
+  background: #e8e8e8;
+}
+
+.student-tab.active {
+  background: linear-gradient(135deg, rgba(255, 159, 67, 0.1) 0%, rgba(255, 107, 129, 0.1) 100%);
+  border-color: var(--candy-orange);
+}
+
+.student-avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--candy-orange), var(--candy-pink));
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+}
+
+.student-name {
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 /* 积分显示 */
@@ -509,6 +894,13 @@ function formatDate(dateStr: string): string {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+
+.gift-card .gift-desc {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
   margin-bottom: 10px;
 }
 
