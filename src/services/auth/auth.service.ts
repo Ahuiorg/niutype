@@ -114,16 +114,17 @@ export async function signUp(params: SignUpParams): Promise<SignUpResult> {
     throw new Error(`创建用户资料失败：${profileError.message}`)
   }
 
-  // 2) 初始化 user_progress（使用默认值）
+  // 2) 初始化 user_progress（学生用户包含欢迎积分）
+  const welcomeBonus = role === 'student' ? 500 : 0
   const { error: progressError } = await supabaseClient
     .from('user_progress')
-    .upsert({ user_id: userId }, { onConflict: 'user_id' })
+    .upsert({ user_id: userId, total_points: welcomeBonus }, { onConflict: 'user_id' })
 
   if (progressError) {
     throw new Error(`初始化用户进度失败：${progressError.message}`)
   }
 
-  // 3) 学生用户赠送欢迎积分
+  // 3) 学生用户记录欢迎积分交易
   if (role === 'student') {
     await addPoints(userId, 500, '新用户注册奖励')
   }
