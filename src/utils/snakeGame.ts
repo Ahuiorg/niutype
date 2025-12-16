@@ -1,7 +1,13 @@
-import type { SnakeGameState, SnakeGameConfig, Direction, SnakeSegment } from '@/types'
+import type { SnakeGameState, SnakeGameConfig, Direction, SnakeSegment, WordQueue } from '@/types'
 
 // 26个英文字母
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+// 蛇头标记（用于渲染时识别蛇头）
+export const SNAKE_HEAD_MARKER = ''
+
+// 果子标记（用于单词间隔）
+export const FRUIT_MARKER = '🍎'
 
 // 默认游戏配置
 export const DEFAULT_SNAKE_CONFIG: SnakeGameConfig = {
@@ -19,11 +25,11 @@ export const CHALLENGE_SUCCESS_LENGTH = 50
 // 根据蛇的长度计算移动速度（数值越小，移动越快）
 export function getMoveSpeedByLength(length: number): number {
   if (length < 10) {
-    return 300  // 10格以下：300ms（最慢）
+    return 350  // 10格以下：300ms（最慢）
   } else if (length < 20) {
-    return 200  // 10-20格：200ms（更快）
+    return 250  // 10-20格：200ms（更快）
   } else if (length < 30) {
-    return 160  // 20-30格：160ms（更快）
+    return 200  // 20-30格：160ms（更快）
   } else {
     // 30格以上继续加速，每10格减少20ms，最低100ms
     const speed = 160 - Math.floor((length - 30) / 10) * 20
@@ -50,16 +56,25 @@ export function initSnakeGame(config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG): S
   const centerX = Math.floor(config.gridWidth / 2)
   const centerY = Math.floor(config.gridHeight / 2)
   
-  // 生成初始蛇身字母
-  const initialLetters = generateRandomLetters(config.initialLength)
+  // 生成初始蛇身字母（蛇头不需要字母）
+  const initialLetters = generateRandomLetters(config.initialLength - 1)
   
   // 创建初始蛇身（水平排列）
   const snake: SnakeSegment[] = []
-  for (let i = 0; i < config.initialLength; i++) {
+  
+  // 蛇头（使用空字符串标记，渲染时显示图标）
+  snake.push({
+    x: centerX,
+    y: centerY,
+    letter: SNAKE_HEAD_MARKER,
+  })
+  
+  // 蛇身（随机字母）
+  for (let i = 1; i < config.initialLength; i++) {
     snake.push({
       x: centerX - i,
       y: centerY,
-      letter: initialLetters[i],
+      letter: initialLetters[i - 1],
     })
   }
 
@@ -74,11 +89,57 @@ export function initSnakeGame(config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG): S
   }
 }
 
-// 生成食物（不与蛇身重叠）
-export function generateFood(
+// 初始化单词队列
+export function initWordQueue(words: string[]): WordQueue {
+  return {
+    words,
+    currentWordIndex: 0,
+    currentLetterIndex: 0,
+  }
+}
+
+// 从单词队列获取下一个字母（或果子分隔符）
+export function getNextLetterFromQueue(queue: WordQueue): { letter: string; newQueue: WordQueue } {
+  const { words, currentWordIndex, currentLetterIndex } = queue
+  
+  if (words.length === 0) {
+    // 没有单词，返回随机字母
+    return {
+      letter: generateRandomLetter(),
+      newQueue: queue,
+    }
+  }
+  
+  const currentWord = words[currentWordIndex]
+  
+  // 当前单词还有字母
+  if (currentLetterIndex < currentWord.length) {
+    return {
+      letter: currentWord[currentLetterIndex],
+      newQueue: {
+        ...queue,
+        currentLetterIndex: currentLetterIndex + 1,
+      },
+    }
+  }
+  
+  // 当前单词结束，返回果子分隔符，并移动到下一个单词
+  const nextWordIndex = (currentWordIndex + 1) % words.length
+  return {
+    letter: FRUIT_MARKER,
+    newQueue: {
+      words,
+      currentWordIndex: nextWordIndex,
+      currentLetterIndex: 0,
+    },
+  }
+}
+
+// 生成食物位置（不与蛇身重叠）
+function generateFoodPosition(
   snake: SnakeSegment[],
-  config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG
-): { x: number; y: number; letter: string } | null {
+  config: SnakeGameConfig
+): { x: number; y: number } | null {
   const occupied = new Set<string>()
   for (const segment of snake) {
     occupied.add(`${segment.x},${segment.y}`)
@@ -97,11 +158,43 @@ export function generateFood(
     return null
   }
 
-  const position = available[Math.floor(Math.random() * available.length)]
+  return available[Math.floor(Math.random() * available.length)]
+}
+
+// 生成食物（不与蛇身重叠）- 随机字母模式
+export function generateFood(
+  snake: SnakeSegment[],
+  config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG
+): { x: number; y: number; letter: string } | null {
+  const position = generateFoodPosition(snake, config)
+  if (!position) return null
+
   return {
     x: position.x,
     y: position.y,
     letter: generateRandomLetter(),
+  }
+}
+
+// 生成食物（单词库模式）
+export function generateFoodFromQueue(
+  snake: SnakeSegment[],
+  queue: WordQueue,
+  config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG
+): { food: { x: number; y: number; letter: string } | null; newQueue: WordQueue } {
+  const position = generateFoodPosition(snake, config)
+  if (!position) {
+    return { food: null, newQueue: queue }
+  }
+
+  const { letter, newQueue } = getNextLetterFromQueue(queue)
+  return {
+    food: {
+      x: position.x,
+      y: position.y,
+      letter,
+    },
+    newQueue,
   }
 }
 
@@ -176,39 +269,67 @@ export function moveSnake(
   }
 
   // 检查是否吃到食物
-  let newSnake = [...state.snake]
+  let newSnake: SnakeSegment[] = []
   let newFood = state.food
   let newScore = state.score
   let ateFood = false
+  let newWordQueue = state.wordQueue
 
   if (newFood && newHeadX === newFood.x && newHeadY === newFood.y) {
     // 吃到食物，增长蛇身
-    newSnake.unshift({
+    // 新头部移动到食物位置（蛇头标记）
+    newSnake.push({
       x: newHeadX,
       y: newHeadY,
-      letter: newFood.letter, // 被吃的字母成为新节段
+      letter: SNAKE_HEAD_MARKER,
     })
+    // 原头部位置变成食物字母
+    newSnake.push({
+      x: head.x,
+      y: head.y,
+      letter: newFood.letter,
+    })
+    // 复制其余蛇身节段（保持原有字母）
+    for (let i = 1; i < state.snake.length; i++) {
+      newSnake.push({ ...state.snake[i] })
+    }
     newScore += config.scorePerLetter
     ateFood = true
-    // 生成新食物
-    newFood = generateFood(newSnake, config)
+    
+    // 生成新食物（根据是否有单词队列）
+    if (state.wordQueue) {
+      const result = generateFoodFromQueue(newSnake, state.wordQueue, config)
+      newFood = result.food
+      newWordQueue = result.newQueue
+    } else {
+      newFood = generateFood(newSnake, config)
+    }
   } else {
     // 没吃到食物，移动蛇身
-    newSnake.unshift({
+    // 新头部（蛇头标记）
+    newSnake.push({
       x: newHeadX,
       y: newHeadY,
-      letter: head.letter, // 头部字母保持不变
+      letter: SNAKE_HEAD_MARKER,
     })
-    newSnake.pop() // 移除尾部
+    // 复制蛇身节段（除了最后一个，保持原有字母）
+    for (let i = 1; i < state.snake.length; i++) {
+      newSnake.push({
+        x: state.snake[i - 1].x,
+        y: state.snake[i - 1].y,
+        letter: state.snake[i].letter,
+      })
+    }
   }
 
   return {
     ...state,
     snake: newSnake,
-    food: newFood || (ateFood ? generateFood(newSnake, config) : state.food),
+    food: newFood || state.food,
     direction,
     nextDirection: null,
     score: newScore,
+    wordQueue: newWordQueue,
     ateFood, // 用于触发特效
   }
 }
@@ -240,9 +361,33 @@ export function togglePause(state: SnakeGameState): SnakeGameState {
   }
 }
 
-// 重置游戏
+// 重置游戏（随机字母模式）
 export function resetGame(config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG): SnakeGameState {
   const newState = initSnakeGame(config)
   newState.food = generateFood(newState.snake, config)
   return newState
+}
+
+// 初始化游戏（单词库模式）
+export function initSnakeGameWithWords(
+  words: string[],
+  config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG
+): SnakeGameState {
+  const state = initSnakeGame(config)
+  const wordQueue = initWordQueue(words)
+  const { food, newQueue } = generateFoodFromQueue(state.snake, wordQueue, config)
+  
+  return {
+    ...state,
+    food,
+    wordQueue: newQueue,
+  }
+}
+
+// 重置游戏（单词库模式）
+export function resetGameWithWords(
+  words: string[],
+  config: SnakeGameConfig = DEFAULT_SNAKE_CONFIG
+): SnakeGameState {
+  return initSnakeGameWithWords(words, config)
 }

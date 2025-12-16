@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
 import { getUserProfile, type UserProfile } from '@/services/api/user.api'
+import CuteIcons from '@/components/icons/CuteIcons.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -13,12 +14,12 @@ const gameStore = useGameStore()
 const authStore = useAuthStore()
 
 const navItems = [
-  { path: '/', name: '首页', icon: '🏠' },
-  { path: '/exercise', name: '练习', icon: '⌨️' },
-  { path: '/stats', name: '统计', icon: '📊' },
-  { path: '/achievements', name: '成就', icon: '🏆' },
-  { path: '/gifts', name: '礼物', icon: '🎁' },
-  { path: '/games', name: '游戏', icon: '🎮' },
+  { path: '/', name: '首页', icon: 'home' },
+  { path: '/exercise', name: '练习', icon: 'keyboard' },
+  { path: '/stats', name: '统计', icon: 'stats' },
+  { path: '/achievements', name: '成就', icon: 'trophy' },
+  { path: '/gifts', name: '礼物', icon: 'gift' },
+  { path: '/games', name: '游戏', icon: 'game' },
 ]
 
 const isActive = (path: string) => {
@@ -109,7 +110,7 @@ watch(
   <nav class="navbar">
     <div class="navbar-content">
       <div class="navbar-brand" @click="router.push('/')">
-        <span class="brand-icon">⌨️</span>
+        <CuteIcons name="keyboard" :size="28" class="brand-icon" />
         <span class="brand-text">打字小达人</span>
         <span class="brand-sparkle">✨</span>
       </div>
@@ -122,18 +123,18 @@ watch(
           class="nav-item"
           :class="{ active: isActive(item.path) }"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
+          <CuteIcons :name="item.icon" :size="22" class="nav-icon" />
           <span class="nav-text">{{ item.name }}</span>
         </router-link>
       </div>
       
       <div class="navbar-right">
         <div class="navbar-game-time" v-if="remainingGameTime > 0">
-          <span class="game-time-icon">⏱️</span>
+          <CuteIcons name="clock" :size="20" class="game-time-icon" />
           <span class="game-time-value">{{ formatTime(remainingGameTime) }}</span>
         </div>
         <div class="navbar-points">
-          <span class="points-icon">⭐</span>
+          <CuteIcons name="star" :size="22" class="points-icon" />
           <span class="points-value">{{ userStore.availablePoints }}</span>
         </div>
 
@@ -222,7 +223,6 @@ watch(
 }
 
 .brand-icon {
-  font-size: 1.75rem;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
@@ -308,9 +308,9 @@ watch(
 }
 
 .nav-icon {
-  font-size: 1.2rem;
   position: relative;
   z-index: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 .nav-text {
@@ -340,7 +340,7 @@ watch(
 }
 
 .game-time-icon {
-  font-size: 1.1rem;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 .game-time-value {
@@ -370,8 +370,8 @@ watch(
 }
 
 .points-icon {
-  font-size: 1.3rem;
   animation: pulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 @keyframes pulse {

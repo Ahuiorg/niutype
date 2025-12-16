@@ -203,6 +203,13 @@ export interface SnakeGameConfig {
   scorePerLetter: number  // 每个字母的分数
 }
 
+// 单词队列（用于单词库模式）
+export interface WordQueue {
+  words: string[]           // 单词库
+  currentWordIndex: number  // 当前单词索引
+  currentLetterIndex: number // 当前字母索引
+}
+
 // 贪吃蛇游戏状态
 export interface SnakeGameState {
   snake: SnakeSegment[]   // 蛇身（头部在数组第一个）
@@ -212,6 +219,7 @@ export interface SnakeGameState {
   score: number           // 当前分数
   isGameOver: boolean    // 游戏是否结束
   isPaused: boolean       // 是否暂停
+  wordQueue?: WordQueue   // 单词队列（单词库模式）
 }
 
 // 游戏模块配置

@@ -124,3 +124,6 @@ const getIcon = (severity: AppError['severity']) => {
   transition: transform 0.3s ease;
 }
 </style>
+
+
+

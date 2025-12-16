@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { getStage, STAGE_NAMES, EXERCISE_CONFIG } from '@/types'
 import { getDayDescription } from '@/utils/exerciseGenerator'
 import ProgressBar from '@/components/exercise/ProgressBar.vue'
+import CuteIcons from '@/components/icons/CuteIcons.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -55,21 +56,21 @@ function startExercise() {
       <div class="stats-badges">
         <div class="stat-badge stat-badge-fire animate-fadeInUp stagger-1">
           <div class="stat-icon-wrapper">
-            <span class="stat-icon">🔥</span>
+            <CuteIcons name="fire" :size="32" />
           </div>
           <span class="stat-value">{{ userStore.userData.consecutiveDays }}</span>
           <span class="stat-label">连续天数</span>
         </div>
         <div class="stat-badge stat-badge-target animate-fadeInUp stagger-2">
           <div class="stat-icon-wrapper">
-            <span class="stat-icon">🎯</span>
+            <CuteIcons name="target" :size="32" />
           </div>
           <span class="stat-value">{{ accuracyPercent }}%</span>
           <span class="stat-label">准确率</span>
         </div>
         <div class="stat-badge stat-badge-chars animate-fadeInUp stagger-3">
           <div class="stat-icon-wrapper">
-            <span class="stat-icon">📝</span>
+            <CuteIcons name="document" :size="32" />
           </div>
           <span class="stat-value">{{ userStore.totalChars }}</span>
           <span class="stat-label">总字符</span>
@@ -86,7 +87,10 @@ function startExercise() {
       </div>
       
       <div class="today-header">
-        <h2 class="section-title">📅 今日练习</h2>
+        <h2 class="section-title">
+          <CuteIcons name="calendar" :size="24" style="margin-right: 8px; vertical-align: middle;" />
+          今日练习
+        </h2>
         <div class="stage-badge">
           {{ stageName }}
         </div>
@@ -123,7 +127,7 @@ function startExercise() {
     <div class="quick-stats grid grid-3">
       <router-link to="/stats" class="quick-card card animate-fadeInUp stagger-3">
         <div class="quick-icon-wrapper quick-icon-blue">
-          <span class="quick-icon">📊</span>
+          <CuteIcons name="stats" :size="48" />
         </div>
         <span class="quick-title">查看统计</span>
         <span class="quick-desc">详细练习数据</span>
@@ -132,7 +136,7 @@ function startExercise() {
       
       <router-link to="/achievements" class="quick-card card animate-fadeInUp stagger-4">
         <div class="quick-icon-wrapper quick-icon-yellow">
-          <span class="quick-icon">🏆</span>
+          <CuteIcons name="trophy" :size="48" />
         </div>
         <span class="quick-title">成就中心</span>
         <span class="quick-desc">{{ userStore.userData.achievements.length }} 个已解锁</span>
@@ -141,7 +145,7 @@ function startExercise() {
       
       <router-link to="/gifts" class="quick-card card animate-fadeInUp stagger-5">
         <div class="quick-icon-wrapper quick-icon-pink">
-          <span class="quick-icon">🎁</span>
+          <CuteIcons name="gift" :size="48" />
         </div>
         <span class="quick-title">礼物商店</span>
         <span class="quick-desc">{{ userStore.availablePoints }} 积分可用</span>
@@ -272,9 +276,6 @@ function startExercise() {
   margin-bottom: 8px;
 }
 
-.stat-icon {
-  font-size: 1.8rem;
-}
 
 .stat-value {
   font-family: var(--font-display);
@@ -454,9 +455,6 @@ function startExercise() {
   background: linear-gradient(135deg, rgba(255, 107, 157, 0.15), rgba(156, 136, 255, 0.15));
 }
 
-.quick-icon {
-  font-size: 2.8rem;
-}
 
 .quick-title {
   font-family: var(--font-display);

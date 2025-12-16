@@ -1,7 +1,10 @@
 <template>
   <div class="game-score" :class="{ 'score-updated': scoreUpdated }">
-    <span class="score-label">分数</span>
-    <span class="score-value">{{ score }}</span>
+    <span class="score-icon">⭐</span>
+    <div class="score-content">
+      <span class="score-label">分数</span>
+      <span class="score-value">{{ score }}</span>
+    </div>
   </div>
 </template>
 
@@ -25,43 +28,108 @@ watch(() => props.score, () => {
 
 <style scoped>
 .game-score {
-  padding: 12px 20px;
-  background: rgba(26, 26, 46, 0.8);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  font-family: 'Courier New', monospace;
-  color: #FFFFFF;
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 10px 18px;
+  background: white;
+  border-radius: 100px;
+  box-shadow: 
+    0 4px 12px rgba(255, 159, 67, 0.15),
+    0 2px 0 rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.score-icon {
+  font-size: 16px;
+  animation: starPulse 2s ease-in-out infinite;
+}
+
+@keyframes starPulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(10deg);
+  }
+}
+
+.score-content {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .score-label {
+  font-family: var(--font-body, 'Quicksand', sans-serif);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #7F8C8D);
 }
 
 .score-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #FFD700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  font-family: var(--font-display, 'Baloo 2', cursive);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  background: linear-gradient(135deg, #FF9F43 0%, #FF6B9D 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-updated {
+  transform: scale(1.05);
 }
 
 .score-updated .score-value {
-  animation: scorePulse 0.3s ease;
+  animation: scorePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes scorePulse {
-  0%, 100% {
+.score-updated .score-icon {
+  animation: starBounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes scorePop {
+  0% {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.2);
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes starBounce {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.4) rotate(20deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@media (max-width: 768px) {
+  .game-score {
+    padding: 8px 14px;
+    gap: 5px;
+  }
+  
+  .score-icon {
+    font-size: 14px;
+  }
+  
+  .score-label {
+    font-size: 11px;
+  }
+  
+  .score-value {
+    font-size: 14px;
   }
 }
 </style>
