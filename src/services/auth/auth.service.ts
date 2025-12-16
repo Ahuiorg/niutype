@@ -1,4 +1,5 @@
 import { supabaseClient } from '@/services/supabase/client'
+import { addPoints } from '@/services/api/points.api'
 import type { AccountRecoveryPayload, SignUpParams, SignUpResult, UserRole } from './auth.types'
 
 export const ACCOUNT_NAME_REGEX = /^[a-z0-9]+$/
@@ -120,6 +121,11 @@ export async function signUp(params: SignUpParams): Promise<SignUpResult> {
 
   if (progressError) {
     throw new Error(`初始化用户进度失败：${progressError.message}`)
+  }
+
+  // 3) 学生用户赠送欢迎积分
+  if (role === 'student') {
+    await addPoints(userId, 500, '新用户注册奖励')
   }
 
   return { user: data.user, inviteCode }
